@@ -52,45 +52,49 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
         
         {/* Main Form */}
         <form onSubmit={handleSubmit} className="relative">
-          <div className="relative group">
-            <div className="absolute inset-y-0 start-4 flex items-center pointer-events-none text-slate-500">
-              <Globe className="w-4 h-4 text-blue-400" />
-            </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             
-            <input
-              id="input-target-url"
-              type="text"
-              value={url}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                if (errorMsg) setErrorMsg('');
-              }}
-              placeholder={t.urlPlaceholder}
-              disabled={isLoading}
-              className="w-full bg-slate-900 border border-slate-700 rounded-full py-3 ps-11 pe-36 focus:outline-none focus:border-blue-500 text-sm text-slate-200 placeholder-slate-500 transition-all shadow-inner"
-            />
+            {/* Input Field Container */}
+            <div className="relative flex-1 group">
+              <div className="absolute inset-y-0 start-4 flex items-center pointer-events-none text-slate-500">
+                <Globe className="w-4 h-4 text-blue-400" />
+              </div>
+              
+              <input
+                id="input-target-url"
+                type="text"
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  if (errorMsg) setErrorMsg('');
+                }}
+                placeholder={t.urlPlaceholder}
+                disabled={isLoading}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl sm:rounded-full py-3 ps-11 pe-10 focus:outline-none focus:border-blue-500 text-sm text-slate-200 placeholder-slate-500 transition-all shadow-inner"
+              />
 
-            {url && !isLoading && (
-              <button
-                type="button"
-                onClick={() => setUrl('')}
-                className="absolute inset-y-0 end-32 flex items-center px-2 text-slate-500 hover:text-slate-300 text-xs"
-              >
-                ✕
-              </button>
-            )}
+              {url && !isLoading && (
+                <button
+                  type="button"
+                  onClick={() => setUrl('')}
+                  className="absolute inset-y-0 end-3 flex items-center px-2 text-slate-500 hover:text-slate-300 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
 
-            {/* Scrape / Analyze Action Button */}
+            {/* Scrape / Analyze Action Button (Outside the field) */}
             <button
               id="btn-submit-scrape"
               type="submit"
               disabled={isLoading}
-              className="absolute end-1.5 top-1.5 bottom-1.5 inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-5 rounded-full text-xs sm:text-sm font-semibold tracking-wide transition-all shadow-md shadow-blue-600/30 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer uppercase"
+              className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl sm:rounded-full text-xs sm:text-sm font-semibold tracking-wide transition-all shadow-md shadow-blue-600/30 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer shrink-0 uppercase"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="hidden sm:inline">{loadingStage || t.scrapingButton}</span>
+                  <span>{loadingStage || t.scrapingButton}</span>
                 </>
               ) : (
                 <>

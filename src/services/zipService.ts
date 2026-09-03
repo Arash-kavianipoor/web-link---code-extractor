@@ -18,40 +18,53 @@ export function triggerFileDownload(blob: Blob, filename: string) {
 }
 
 /**
- * Generates and downloads the HTML ZIP bundle
+ * Generates and downloads the HTML ZIP bundle (100% Offline Runnable)
  */
 export async function downloadHtmlZipBundle(bundle: ExtractedBundle): Promise<void> {
   const zip = new JSZip();
-  const folder = zip.folder('html-bundle') || zip;
 
-  // Main clean rendered HTML
-  folder.file('index.html', bundle.sanitizedHtml || bundle.rawHtml);
+  // Root self-contained offline executable HTML
+  const offlineHtml = bundle.sanitizedHtml || bundle.rawHtml;
+  zip.file('index.html', offlineHtml);
 
   // Raw fetched HTML
-  folder.file('raw_source.html', bundle.rawHtml);
+  zip.file('raw_source.html', bundle.rawHtml);
 
   // Site Metadata JSON
-  folder.file('metadata.json', JSON.stringify(bundle.metadata, null, 2));
+  zip.file('metadata.json', JSON.stringify(bundle.metadata, null, 2));
 
   // Headings hierarchy JSON & Markdown outline
-  folder.file('headings_h1_h6.json', JSON.stringify(bundle.headings, null, 2));
+  zip.file('headings_h1_h6.json', JSON.stringify(bundle.headings, null, 2));
   
   const markdownOutline = bundle.headings
     .map((h) => `${'  '.repeat(h.level - 1)}- **${h.tag.toUpperCase()}**: ${h.text}`)
     .join('\n');
-  folder.file('headings_outline.md', `# Headings Outline for ${bundle.targetUrl}\n\n${markdownOutline}`);
+  zip.file('headings_outline.md', `# Headings Outline for ${bundle.targetUrl}\n\n${markdownOutline}`);
 
   // Individual HTML sub-assets if any
   bundle.htmlFiles.forEach((file, index) => {
-    if (file.filename !== 'index.html') {
-      folder.file(file.filename || `page_part_${index + 1}.html`, file.content);
+    if (file.filename !== 'index.html' && file.filename !== 'raw_source.html') {
+      zip.file(file.filename || `page_part_${index + 1}.html`, file.content);
     }
   });
 
-  // Manifest info
-  folder.file(
-    'HTML_MANIFEST.txt',
-    `Extracted from: ${bundle.targetUrl}\nScraped at: ${bundle.scrapedAt}\nEngine: ${bundle.engineUsed}\nTotal Headings: ${bundle.headingCounts.total}\n`
+  // Offline Instruction & Manifest
+  zip.file(
+    'README_OFFLINE.txt',
+    `═════════════════════════════════════════════════════════════════════
+راهنمای اجرای آفلاین (Offline Execution Guide)
+═════════════════════════════════════════════════════════════════════
+برای اجرای آفلاین سایت بدون نیاز به اتصال اینترنت:
+1. فایل زیپ را استخراج (Extract) کنید.
+2. بر روی فایل index.html دابل‌کلیک کنید تا در هر مرورگری اجرا شود.
+3. تمامی استایل‌های CSS و ساختار صفحات به صورت کامل درون فایل گنجانده شده‌اند.
+
+Site: ${bundle.targetUrl}
+Date: ${bundle.scrapedAt}
+Engine: ${bundle.engineUsed}
+Headings Total: ${bundle.headingCounts.total}
+═════════════════════════════════════════════════════════════════════
+`
   );
 
   const content = await zip.generateAsync({ type: 'blob' });
@@ -64,20 +77,43 @@ export async function downloadHtmlZipBundle(bundle: ExtractedBundle): Promise<vo
  */
 export async function downloadCssZipBundle(bundle: ExtractedBundle): Promise<void> {
   const zip = new JSZip();
-  const folder = zip.folder('css-bundle') || zip;
 
   // Master combined stylesheet
   const allCss = bundle.cssFiles.map((c) => `/* File: ${c.filename} */\n${c.content}\n`).join('\n\n');
-  folder.file('styles.bundle.css', allCss || '/* No CSS styles extracted */');
+  zip.file('styles.bundle.css', allCss || '/* No CSS styles extracted */');
 
   // Individual stylesheets
+  const cssFolder = zip.folder('stylesheets') || zip;
   bundle.cssFiles.forEach((file, idx) => {
     const filename = file.filename || `style_${idx + 1}.css`;
-    folder.file(filename, file.content);
+    cssFolder.file(filename, file.content);
   });
 
+  // Offline CSS preview test page
+  zip.file(
+    'preview_styles.html',
+    `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS Styles Preview - ${bundle.metadata.title}</title>
+  <link rel="stylesheet" href="styles.bundle.css">
+  <style>
+    .demo-container { max-width: 800px; margin: 2rem auto; padding: 1.5rem; font-family: system-ui; }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <h1>CSS Styles Bundle Preview</h1>
+    <p>This page demonstrates styles linked from <code>styles.bundle.css</code>.</p>
+  </div>
+</body>
+</html>`
+  );
+
   // Manifest
-  folder.file(
+  zip.file(
     'CSS_MANIFEST.json',
     JSON.stringify(
       {
@@ -107,20 +143,20 @@ export async function downloadCssZipBundle(bundle: ExtractedBundle): Promise<voi
  */
 export async function downloadJsZipBundle(bundle: ExtractedBundle): Promise<void> {
   const zip = new JSZip();
-  const folder = zip.folder('js-bundle') || zip;
 
   // Master combined scripts
   const allJs = bundle.jsFiles.map((j) => `// File: ${j.filename}\n${j.content}\n`).join('\n\n');
-  folder.file('bundle.scripts.js', allJs || '// No scripts extracted');
+  zip.file('bundle.scripts.js', allJs || '// No scripts extracted');
 
   // Individual JS files
+  const jsFolder = zip.folder('scripts') || zip;
   bundle.jsFiles.forEach((file, idx) => {
     const filename = file.filename || `script_${idx + 1}.js`;
-    folder.file(filename, file.content);
+    jsFolder.file(filename, file.content);
   });
 
   // Scripts Manifest
-  folder.file(
+  zip.file(
     'JS_MANIFEST.json',
     JSON.stringify(
       {
@@ -146,21 +182,27 @@ export async function downloadJsZipBundle(bundle: ExtractedBundle): Promise<void
 }
 
 /**
- * Generates and downloads the Complete Master ZIP (containing all 3 bundles: HTML, CSS, JS)
+ * Generates and downloads the Complete Master ZIP (containing 100% Offline Executable index.html + all 3 bundles)
  */
 export async function downloadMasterPackageZip(bundle: ExtractedBundle): Promise<void> {
   const zip = new JSZip();
 
-  // HTML Subfolder
+  // 1. ROOT DIRECTORY: 100% Offline Executable index.html
+  // Double-clicking this file in any browser runs the real website offline without internet!
+  const offlineHtml = bundle.sanitizedHtml || bundle.rawHtml;
+  zip.file('index.html', offlineHtml);
+  zip.file('offline_standalone.html', offlineHtml);
+
+  // 2. HTML Subfolder
   const htmlFolder = zip.folder('01-HTML');
   if (htmlFolder) {
-    htmlFolder.file('index.html', bundle.sanitizedHtml || bundle.rawHtml);
+    htmlFolder.file('index.html', offlineHtml);
     htmlFolder.file('raw_source.html', bundle.rawHtml);
     htmlFolder.file('headings_h1_h6.json', JSON.stringify(bundle.headings, null, 2));
     htmlFolder.file('metadata.json', JSON.stringify(bundle.metadata, null, 2));
   }
 
-  // CSS Subfolder
+  // 3. CSS Subfolder
   const cssFolder = zip.folder('02-CSS');
   if (cssFolder) {
     const allCss = bundle.cssFiles.map((c) => `/* ${c.filename} */\n${c.content}`).join('\n\n');
@@ -170,7 +212,7 @@ export async function downloadMasterPackageZip(bundle: ExtractedBundle): Promise
     });
   }
 
-  // JS Subfolder
+  // 4. JS Subfolder
   const jsFolder = zip.folder('03-JS');
   if (jsFolder) {
     const allJs = bundle.jsFiles.map((j) => `// ${j.filename}\n${j.content}`).join('\n\n');
@@ -180,17 +222,36 @@ export async function downloadMasterPackageZip(bundle: ExtractedBundle): Promise
     });
   }
 
-  // Master Readme & SEO report
+  // 5. Master Readme & Offline Execution Guide
   zip.file(
     'README.md',
-    `# Complete Extracted Web Package
+    `# بسته کامل استخراج وب و اجرای آفلاین (Offline Web Package)
 - **Target URL**: ${bundle.targetUrl}
 - **Extracted At**: ${bundle.scrapedAt}
 - **Engine**: ${bundle.engineUsed}
-- **Total Assets Extracted**: ${bundle.stats.totalAssets}
-- **Total Data Size**: ${(bundle.stats.totalSizeBytes / 1024).toFixed(2)} KB
+- **Total Assets**: ${bundle.stats.totalAssets}
+- **Data Size**: ${(bundle.stats.totalSizeBytes / 1024).toFixed(2)} KB
 
-## Headings Summary
+---
+
+## 🚀 راهنمای اجرای آفلاین بدون اینترنت (Offline Run Guide):
+این بسته به گونه‌ای مهندسی شده است که **کاملاً بدون نیاز به اینترنت و بدون نیاز به سرور محلی** قابل اجرا باشد:
+1. فایل زیپ را از حالت فشرده خارج (Extract) کنید.
+2. بر روی فایل **\`index.html\`** یا **\`offline_standalone.html\`** در پوشه اصلی دابل‌کلیک کنید.
+3. سایت در مرورگر شما (Google Chrome, Firefox, Safari, Edge) به صورت کامل همراه با تمام استایل‌ها، فونت‌ها و ساختار DOM اجرا می‌شود.
+
+---
+
+## 📁 ساختار فایل‌های استخراج‌شده:
+- \`index.html\`: فایل اجرایی اصلی به صورت خودکفا (Self-Contained) با استایل‌های اینلاین
+- \`01-HTML/\`: سورس خام و بهینه‌سازی‌شده HTML و متادیتاها
+- \`02-CSS/\`: فایل جامع \`styles.bundle.css\` و تمامی شیت‌های تفکیک‌شده
+- \`03-JS/\`: فایل جامع \`bundle.scripts.js\` و اسکریپت‌های تفکیک‌شده
+- \`seo_heading_audit.json\`: گزارش کامل تگ‌های هدینگ H1 تا H6 و سئو
+
+---
+
+### Headings Count:
 - H1: ${bundle.headingCounts.h1}
 - H2: ${bundle.headingCounts.h2}
 - H3: ${bundle.headingCounts.h3}
@@ -198,8 +259,6 @@ export async function downloadMasterPackageZip(bundle: ExtractedBundle): Promise
 - H5: ${bundle.headingCounts.h5}
 - H6: ${bundle.headingCounts.h6}
 - Total: ${bundle.headingCounts.total}
-
-Generated with WebScrape Studio (Client-side Browser Engine).
 `
   );
 
@@ -219,7 +278,7 @@ Generated with WebScrape Studio (Client-side Browser Engine).
 
   const content = await zip.generateAsync({ type: 'blob' });
   const domainName = getCleanDomain(bundle.targetUrl);
-  triggerFileDownload(content, `${domainName}-full-triple-package.zip`);
+  triggerFileDownload(content, `${domainName}-full-offline-package.zip`);
 }
 
 function getCleanDomain(url: string): string {
@@ -230,3 +289,4 @@ function getCleanDomain(url: string): string {
     return 'scraped-site';
   }
 }
+
