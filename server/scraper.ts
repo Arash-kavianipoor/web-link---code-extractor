@@ -233,8 +233,8 @@ export class SubrequestTracker {
 }
 
 /**
- * Concurrency runner matching standard browser connection pooling (6 lanes)
- * with polite micro-jitter to prevent host rate-limiting bans.
+ * Concurrency runner matching standard browser connection pooling (up to 10 lanes)
+ * for rapid parallel subresource downloading without blocking the event loop.
  */
 async function runWithConcurrency<T, R>(
   items: T[],
@@ -248,9 +248,11 @@ async function runWithConcurrency<T, R>(
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (currentIndex < items.length) {
       const idx = currentIndex++;
-      results[idx] = await fn(items[idx], idx);
-      // Small polite jitter (8-20ms) to emulate human browser packet flow
-      await new Promise((r) => setTimeout(r, 8 + Math.random() * 12));
+      try {
+        results[idx] = await fn(items[idx], idx);
+      } catch {
+        // Continue processing other lanes even if one task fails
+      }
     }
   });
 
@@ -260,7 +262,7 @@ async function runWithConcurrency<T, R>(
 
 async function fetchWithTimeout(
   url: string,
-  timeoutMs = 12000,
+  timeoutMs = 6000,
   tracker?: SubrequestTracker,
   resourceType: 'document' | 'image' | 'style' | 'font' | 'script' | 'other' = 'document',
   refererUrl?: string,
@@ -296,9 +298,9 @@ async function fetchWithTimeout(
         if (setCookie) cookieJar.storeCookies(setCookie);
       }
 
-      // Handle rate limit (429) or transient 503 with polite backoff
-      if ((res.status === 429 || res.status === 503) && retryCount < 1) {
-        await new Promise((r) => setTimeout(r, 800));
+      // Handle rate limit (429) or transient 503 only for the primary document (fast backoff)
+      if (resourceType === 'document' && (res.status === 429 || res.status === 503) && retryCount < 1) {
+        await new Promise((r) => setTimeout(r, 250));
         return attemptFetch(retryCount + 1);
       }
 
@@ -310,8 +312,9 @@ async function fetchWithTimeout(
       return { ok: res.ok, status: res.status, text, contentType, finalUrl: res.url || url };
     } catch (err: any) {
       clearTimeout(id);
-      if (retryCount < 1) {
-        await new Promise((r) => setTimeout(r, 500));
+      // Fast single retry only for the primary HTML document, never for subresources
+      if (resourceType === 'document' && retryCount < 1) {
+        await new Promise((r) => setTimeout(r, 200));
         return attemptFetch(retryCount + 1);
       }
       throw new Error(`Failed to fetch ${url}: ${err.message}`);
@@ -323,7 +326,7 @@ async function fetchWithTimeout(
 
 async function fetchBinary(
   url: string,
-  timeoutMs = 9000,
+  timeoutMs = 2500,
   tracker?: SubrequestTracker,
   refererUrl?: string,
   cookieJar?: CookieJar,
@@ -341,60 +344,47 @@ async function fetchBinary(
 
   const headers = getBrowserHeaders(resourceType, refererUrl, cookieHeader, targetOrigin);
 
-  const attemptBinary = async (retryCount = 0): Promise<{ buffer: Buffer; mimeType: string } | null> => {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers,
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-      clearTimeout(id);
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers,
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+    clearTimeout(id);
 
-      if (cookieJar) {
-        const setCookie = res.headers.get('set-cookie');
-        if (setCookie) cookieJar.storeCookies(setCookie);
-      }
+    if (cookieJar) {
+      const setCookie = res.headers.get('set-cookie');
+      if (setCookie) cookieJar.storeCookies(setCookie);
+    }
 
-      if ((res.status === 429 || res.status === 503) && retryCount < 1) {
-        await new Promise((r) => setTimeout(r, 700));
-        return attemptBinary(retryCount + 1);
-      }
+    if (!res.ok) return null;
 
-      if (!res.ok) return null;
+    let mimeType = res.headers.get('content-type') || '';
+    mimeType = mimeType.split(';')[0].trim().toLowerCase();
 
-      let mimeType = res.headers.get('content-type') || '';
-      mimeType = mimeType.split(';')[0].trim().toLowerCase();
+    if (!mimeType || mimeType === 'application/octet-stream') {
+      mimeType = guessMimeType(url);
+    }
 
-      if (!mimeType || mimeType === 'application/octet-stream') {
-        mimeType = guessMimeType(url);
-      }
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-      const arrayBuffer = await res.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      // Safe individual asset limit: 4MB
-      if (buffer.byteLength > 4 * 1024 * 1024) {
-        return null;
-      }
-
-      if (tracker) {
-        tracker.recordBytes(buffer.byteLength);
-      }
-
-      return { buffer, mimeType };
-    } catch {
-      clearTimeout(id);
-      if (retryCount < 1) {
-        await new Promise((r) => setTimeout(r, 400));
-        return attemptBinary(retryCount + 1);
-      }
+    // Limit individual asset to 2.5MB to keep response snappy
+    if (buffer.byteLength > 2.5 * 1024 * 1024) {
       return null;
     }
-  };
 
-  return attemptBinary(0);
+    if (tracker) {
+      tracker.recordBytes(buffer.byteLength);
+    }
+
+    return { buffer, mimeType };
+  } catch {
+    clearTimeout(id);
+    return null;
+  }
 }
 
 function guessMimeType(urlStr: string): string {
@@ -524,7 +514,7 @@ async function processCssContent(
 
       const res = await fetchWithTimeout(
         resolvedImportUrl,
-        8000,
+        2500,
         tracker,
         'style',
         cssBaseUrl,
@@ -575,8 +565,8 @@ async function processCssContent(
     }
   }
 
-  // Pre-fetch fonts and images with concurrency pooling
-  await runWithConcurrency(distinctAssetPaths, 6, async (assetPath) => {
+  // Pre-fetch key fonts and images with concurrency pooling (top 20 priority assets)
+  await runWithConcurrency(distinctAssetPaths.slice(0, 20), 8, async (assetPath) => {
     if (!tracker.canFetch()) return;
     try {
       const resolvedAssetUrl = new URL(assetPath, cssBaseUrl).href;
@@ -588,13 +578,13 @@ async function processCssContent(
         if (isEmbeddable) {
           const binary = await fetchBinary(
             resolvedAssetUrl,
-            7000,
+            2200,
             tracker,
             cssBaseUrl,
             cookieJar,
             isFont ? 'font' : 'image'
           );
-          if (binary && binary.buffer.byteLength <= 3 * 1024 * 1024) {
+          if (binary && binary.buffer.byteLength <= 2.5 * 1024 * 1024) {
             const b64 = binary.buffer.toString('base64');
             const dataUri = `data:${binary.mimeType};base64,${b64}`;
             assetCache.set(resolvedAssetUrl, dataUri);
