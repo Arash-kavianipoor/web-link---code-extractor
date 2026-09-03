@@ -15,13 +15,11 @@ import {
 export const DEVICE_PROFILES: Record<DeviceType, { name: string; userAgent: string; secChUa: string; secChUaMobile: string; secChUaPlatform: string; viewport: string; previewWidth: number }> = {
   desktop: { name: 'Desktop', userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36', secChUa: '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"', secChUaMobile: '?0', secChUaPlatform: '"Windows"', viewport: 'width=device-width, initial-scale=1.0', previewWidth: 1280 },
   tablet: { name: 'Tablet', userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1', secChUa: '"Not(A:Brand";v="99", "Apple Safari";v="17", "WebKit";v="605"', secChUaMobile: '?1', secChUaPlatform: '"iOS"', viewport: 'width=768, initial-scale=1.0, maximum-scale=2.0', previewWidth: 768 },
-  mobile: { name: 'Mobile', userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36', secChUa: '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"', secChUaMobile: '?1', secChUaPlatform: '"Android"', viewport: 'width=390, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes', previewWidth: 390 },
+  mobile: { name: 'Mobile', userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36', secChUa: '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"', secChUaMobile: '?1', secChUaPlatform: '"Android"', viewport: 'width=390, initial-scale=1.0, maximum-scale=2.0', previewWidth: 390 },
 };
 
 const TRACKER_DOMAINS = ['google-analytics.com','googletagmanager.com','connect.facebook.net','facebook.com/tr','clarity.ms','hotjar.com','doubleclick.net','pagead2.googlesyndication.com','yandex.ru','mc.yandex.ru','adsbygoogle','amplitude.com','mixpanel.com','segment.io','sentry.io','datadoghq.com','newrelic.com','static.cloudflareinsights.com'];
 
-// Do not infer the runtime from `process`: nodejs_compat can expose Node globals inside Workers.
-// The caller explicitly selects the runtime.
 type ScraperRuntime = 'node' | 'cloudflare';
 
 export class CookieJar {
@@ -39,9 +37,7 @@ export class CookieJar {
       }
     }
   }
-  getCookieHeader(): string {
-    return Array.from(this.cookies.entries()).map(([k,v]) => `${k}=${v}`).join('; ');
-  }
+  getCookieHeader(): string { return Array.from(this.cookies.entries()).map(([k,v]) => `${k}=${v}`).join('; '); }
 }
 
 function getBrowserHeaders(resourceType: 'document'|'image'|'style'|'font'|'script'|'other', refererUrl?: string, cookieHeader?: string, targetOrigin?: string, device: DeviceType = 'desktop'): Record<string,string> {
@@ -121,13 +117,8 @@ async function fetchBinary(url:string,timeoutMs=2500,tracker?:SubrequestTracker,
 }
 
 function guessMimeType(urlStr:string){try{const p=new URL(urlStr).pathname.toLowerCase(); if(p.endsWith('.woff2'))return'font/woff2'; if(p.endsWith('.woff'))return'font/woff'; if(p.endsWith('.ttf'))return'font/ttf'; if(p.endsWith('.otf'))return'font/otf'; if(p.endsWith('.eot'))return'application/vnd.ms-fontobject'; if(p.endsWith('.svg'))return'image/svg+xml'; if(p.endsWith('.png'))return'image/png'; if(/\.jpe?g$/.test(p))return'image/jpeg'; if(p.endsWith('.gif'))return'image/gif'; if(p.endsWith('.webp'))return'image/webp'; if(p.endsWith('.avif'))return'image/avif'; if(p.endsWith('.ico'))return'image/x-icon';}catch{} return'application/octet-stream';}
-
 function toBase64(bytes:Uint8Array){let binary=''; const chunk=0x8000; for(let i=0;i<bytes.length;i+=chunk) binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length))); return btoa(binary);}
-
-function classifyLink(rawHref:string,basePageUrl:string,rootOrigin:string):{resolvedUrl:string;type:LinkType}{
-  const trimmed=rawHref.trim(); if(trimmed.startsWith('mailto:'))return{resolvedUrl:trimmed,type:'mailto'}; if(trimmed.startsWith('tel:')||trimmed.startsWith('sms:'))return{resolvedUrl:trimmed,type:'other'}; if(trimmed.startsWith('#'))return{resolvedUrl:trimmed,type:'anchor'}; if(trimmed.startsWith('javascript:'))return{resolvedUrl:trimmed,type:'other'};
-  try{const resolved=new URL(trimmed,basePageUrl); const pathname=resolved.pathname.toLowerCase(); if(/\.(png|jpe?g|gif|webp|avif|svg|ico|pdf|zip|tar|gz|mp3|mp4|mov|woff2?|ttf|eot)$/i.test(pathname))return{resolvedUrl:resolved.href,type:'asset'}; return resolved.origin===rootOrigin?{resolvedUrl:resolved.href,type:'internal'}:{resolvedUrl:resolved.href,type:'external'};}catch{return{resolvedUrl:trimmed,type:'other'}}
-}
+function classifyLink(rawHref:string,basePageUrl:string,rootOrigin:string):{resolvedUrl:string;type:LinkType}{ const trimmed=rawHref.trim(); if(trimmed.startsWith('mailto:'))return{resolvedUrl:trimmed,type:'mailto'}; if(trimmed.startsWith('tel:')||trimmed.startsWith('sms:'))return{resolvedUrl:trimmed,type:'other'}; if(trimmed.startsWith('#'))return{resolvedUrl:trimmed,type:'anchor'}; if(trimmed.startsWith('javascript:'))return{resolvedUrl:trimmed,type:'other'}; try{const resolved=new URL(trimmed,basePageUrl); const pathname=resolved.pathname.toLowerCase(); if(/\.(png|jpe?g|gif|webp|avif|svg|ico|pdf|zip|tar|gz|mp3|mp4|mov|woff2?|ttf|eot)$/i.test(pathname))return{resolvedUrl:resolved.href,type:'asset'}; return resolved.origin===rootOrigin?{resolvedUrl:resolved.href,type:'internal'}:{resolvedUrl:resolved.href,type:'external'};}catch{return{resolvedUrl:trimmed,type:'other'}} }
 function isStylesheetLink(relAttr:string,asAttr:string,typeAttr:string,hrefAttr:string){const rel=(relAttr||'').toLowerCase(),as=(asAttr||'').toLowerCase(),type=(typeAttr||'').toLowerCase(),href=(hrefAttr||'').toLowerCase(); return rel.includes('stylesheet')||as==='style'||type==='text/css'||/\.css(\?.*)?$/i.test(href);}
 function parseSrcsetUrls(srcsetValue:string){if(!srcsetValue)return[]; return srcsetValue.split(/,\s*(?![^()]*\))/).map(e=>e.trim().split(/\s+/)[0]).filter(u=>u&&!u.startsWith('data:'));}
 
@@ -137,7 +128,7 @@ async function processCssContent(rawCss:string,cssBaseUrl:string,visitedCssUrls:
   for(const match of [...processed.matchAll(importRegex)]){if(!tracker.canFetch())break; const stmt=match[0],path=String(match[1]||match[2]||'').trim(); if(!path||path.startsWith('data:'))continue; try{const u=new URL(path,cssBaseUrl).href;if(visitedCssUrls.has(u)){processed=processed.replace(stmt,'');continue;} visitedCssUrls.add(u); const res=await fetchWithTimeout(u,2500,tracker,'style',cssBaseUrl,cookieJar); if(res.ok&&res.text){const nested=await processCssContent(res.text,u,visitedCssUrls,assetCache,tracker,cookieJar,depth+1,assetLimit);processed=processed.replace(stmt,`\n${nested}\n`);}else processed=processed.replace(stmt,'');}catch{processed=processed.replace(stmt,'');}}
   const urls=[...processed.matchAll(/url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi)].map(m=>m[2]?.trim()).filter(u=>u&&!u.startsWith('data:')&&!u.startsWith('#')&&!u.startsWith('blob:'));
   await runWithConcurrency([...new Set(urls)].slice(0,assetLimit),4,async(assetPath)=>{if(!tracker.canFetch())return; try{const u=new URL(assetPath,cssBaseUrl).href;if(assetCache.has(u))return;const isFont=/\.(woff2?|ttf|otf|eot)(\?.*)?$/i.test(u);const b=await fetchBinary(u,1800,tracker,cssBaseUrl,cookieJar,isFont?'font':'image');if(b)assetCache.set(u,`data:${b.mimeType};base64,${toBase64(b.buffer)}`);}catch{}});
-  return processed.replace(/url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,(full,_q,raw)=>{const t=String(raw||'').trim();if(!t||t.startsWith('data:')||t.startsWith('#')||t.startsWith('blob:'))return full;try{const u=new URL(t,cssBaseUrl).href;return `url("${assetCache.get(u)||u}")`;}catch{return full;}});
+  return processed.replace(/url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,(full,_q,raw)=>{const t=String(raw||'').trim();if(!t||t.startsWith('data:')||t.startsWith('#')||t.startsWith('blob:'))return full;try{const u=new URL(t,cssBaseUrl).href;return `url(\"${assetCache.get(u)||u}\")`;}catch{return full;}});
 }
 
 async function processHtmlForOffline(rawHtml:string,pageUrl:string,combinedCss:string,pageMapping:Map<string,string>,assetCache:Map<string,string>,tracker:SubrequestTracker,cookieJar:CookieJar,device:DeviceType='desktop',embedAssets=true){
@@ -157,21 +148,36 @@ export async function scrapeWebPage(startUrlInput:string,mode:CrawlMode='single'
   const runtime=options?.runtime||'node'; const isCloudflare=runtime==='cloudflare'; const startTime=Date.now(); let parsedStartUrl:URL; let normalizedInput=startUrlInput.trim(); if(!/^https?:\/\//i.test(normalizedInput))normalizedInput='https://'+normalizedInput;
   try{parsedStartUrl=new URL(normalizedInput);}catch{throw new Error(`Invalid URL provided: ${startUrlInput}`);} const baseOrigin=parsedStartUrl.origin,domain=parsedStartUrl.hostname; const cookieJar=new CookieJar(); const visitedUrls=new Set<string>(),toVisitQueue=[parsedStartUrl.href]; const allScrapedLinks:ScrapedLink[]=[],allScrapedHeadings:ScrapedHeading[]=[],seenLinkKeys=new Set<string>();
   const rawPagesMap=new Map<string,{filename:string;title:string;rawHtml:string}>(),pageMapping=new Map<string,string>(); const discoveredStyles:{type:'external'|'inline';url?:string;content?:string;media?:string;source:string}[]=[]; const discoveredScriptUrls=new Set<string>(); const discoveredInlineScripts:{source:string;content:string}[]=[]; const assetCache=new Map<string,string>(); let siteTitle='';
-  // Explicit budgets: Workers must stay well below the platform subrequest limit because this scraper makes nested CSS/media requests.
   const tracker=new SubrequestTracker(isCloudflare?30:600,isCloudflare?8*1024*1024:65*1024*1024);
   const maxPagesToCrawl=mode==='single'?1:Math.min(Math.max(1,maxPages),isCloudflare?3:20);
-  while(toVisitQueue.length&&visitedUrls.size<maxPagesToCrawl){if(!tracker.canFetch())break;const currentUrl=toVisitQueue.shift()!,normalizedUrl=currentUrl.split('#')[0];if(visitedUrls.has(normalizedUrl))continue;visitedUrls.add(normalizedUrl);try{const response=await fetchWithTimeout(currentUrl,isCloudflare?7000:12000,tracker,'document',undefined,cookieJar);if(!response.ok)continue;const html=response.text,$=cheerio.load(html),pageTitle=$('title').text().trim()||domain;if(!siteTitle)siteTitle=pageTitle;let fileName='index.html';if(visitedUrls.size>1){let safePath=new URL(currentUrl).pathname.replace(/[^a-zA-Z0-9_-]/g,'_').replace(/^_+|_+$/g,'');if(!safePath)safePath=`page_${visitedUrls.size}`;fileName=`${safePath}.html`;}rawPagesMap.set(normalizedUrl,{filename:fileName,title:pageTitle,rawHtml:html});pageMapping.set(normalizedUrl,fileName);
+  while(toVisitQueue.length&&visitedUrls.size<maxPagesToCrawl){
+    if(!tracker.canFetch())break;
+    const currentUrl=toVisitQueue.shift()!,normalizedUrl=currentUrl.split('#')[0];
+    if(visitedUrls.has(normalizedUrl))continue;
+    visitedUrls.add(normalizedUrl);
+    try{
+      const response=await fetchWithTimeout(currentUrl,isCloudflare?7000:12000,tracker,'document',undefined,cookieJar);
+      if(!response.ok)continue;
+      const html=response.text,$=cheerio.load(html),pageTitle=$('title').text().trim()||domain;
+      if(!siteTitle)siteTitle=pageTitle;
+      let fileName='index.html';
+      if(visitedUrls.size>1){let safePath=new URL(currentUrl).pathname.replace(/[^a-zA-Z0-9_-]/g,'_').replace(/^_+|_+$/g,'');if(!safePath)safePath=`page_${visitedUrls.size}`;fileName=`${safePath}.html`;}
+      rawPagesMap.set(normalizedUrl,{filename:fileName,title:pageTitle,rawHtml:html});
+      pageMapping.set(normalizedUrl,fileName);
       $('a').each((_,elem)=>{const href=$(elem).attr('href');if(!href)return;const text=$(elem).text().replace(/\s+/g,' ').trim()||$(elem).attr('title')?.trim()||'[No anchor text]';const {resolvedUrl,type}=classifyLink(href,currentUrl,baseOrigin);const key=`${type}:${resolvedUrl}:${text}`;if(!seenLinkKeys.has(key)){seenLinkKeys.add(key);allScrapedLinks.push({id:`link-${allScrapedLinks.length+1}`,url:resolvedUrl,text:text.slice(0,200),type,sourceUrl:currentUrl});}if(mode==='all'&&type==='internal'&&resolvedUrl.startsWith(baseOrigin)){const clean=resolvedUrl.split('#')[0];if(!visitedUrls.has(clean)&&!toVisitQueue.includes(clean)&&!/\.(png|jpe?g|gif|svg|pdf|zip|css|js|xml|json|mp4|mp3)$/i.test(clean))toVisitQueue.push(clean);}});
       $('h1,h2,h3,h4,h5,h6').each((_,elem)=>{const tag=String((elem as any).tagName||(elem as any).name||'').toLowerCase() as HeadingLevel,text=$(elem).text().replace(/\s+/g,' ').trim();if(text)allScrapedHeadings.push({id:`heading-${allScrapedHeadings.length+1}`,level:tag,text:text.slice(0,500),sourceUrl:currentUrl,pageTitle,index:allScrapedHeadings.length+1});});
       $('link,style').each((idx,elem)=>{const tag=String((elem as any).tagName||(elem as any).name||'').toLowerCase();if(tag==='link'){const rel=($(elem).attr('rel')||'').toLowerCase(),as=($(elem).attr('as')||'').toLowerCase(),type=($(elem).attr('type')||'').toLowerCase(),href=$(elem).attr('href')||$(elem).attr('data-href'),media=$(elem).attr('media')?.trim();if(href&&isStylesheetLink(rel,as,type,href)){try{const u=new URL(href,currentUrl).href;if(!discoveredStyles.some(s=>s.url===u))discoveredStyles.push({type:'external',url:u,media,source:`${fileName} (${href})`});}catch{}}}else{const content=$(elem).html()?.trim();if(content)discoveredStyles.push({type:'inline',content,media:$(elem).attr('media')?.trim(),source:`${fileName} inline #${idx+1}`});}});
       $('script[src]').each((_,elem)=>{const src=$(elem).attr('src')||$(elem).attr('data-src');if(src&&!TRACKER_DOMAINS.some(t=>src.includes(t))){try{discoveredScriptUrls.add(new URL(src,currentUrl).href);}catch{}}});
       $('script:not([src])').each((idx,elem)=>{const type=$(elem).attr('type')?.toLowerCase();if(!type||type==='text/javascript'||type==='application/javascript'||type==='module'){const content=$(elem).html()?.trim();if(content&&!TRACKER_DOMAINS.some(t=>content.includes(t)))discoveredInlineScripts.push({source:`${fileName} inline #${idx+1}`,content});}});
-    }catch(e:any){console.warn(`Error crawling ${currentUrl}:`,e?.message||e);}}
+    }catch(e:any){console.warn(`Error crawling ${currentUrl}:`,e?.message||e);}
   }
 
-  // Full three-device emulation is intentionally Node-only. In Workers it multiplies document requests and frequently exhausts the subrequest/time budget.
   const rawPagesMapTablet=new Map<string,{filename:string;title:string;rawHtml:string}>(); const rawPagesMapMobile=new Map<string,{filename:string;title:string;rawHtml:string}>();
-  if(!isCloudflare){for(const [pageUrl,rawData] of rawPagesMap){try{const r=await fetchWithTimeout(pageUrl,10000,tracker,'document',undefined,cookieJar,'tablet');rawPagesMapTablet.set(pageUrl,r.ok&&r.text?{filename:rawData.filename,title:rawData.title,rawHtml:r.text}:{...rawData});}catch{rawPagesMapTablet.set(pageUrl,{...rawData});}try{const r=await fetchWithTimeout(pageUrl,10000,tracker,'document',undefined,cookieJar,'mobile');rawPagesMapMobile.set(pageUrl,r.ok&&r.text?{filename:rawData.filename,title:rawData.title,rawHtml:r.text}:{...rawData});}catch{rawPagesMapMobile.set(pageUrl,{...rawData});}}
+  if(!isCloudflare){
+    for(const [pageUrl,rawData] of rawPagesMap){
+      try{const r=await fetchWithTimeout(pageUrl,10000,tracker,'document',undefined,cookieJar,'tablet');rawPagesMapTablet.set(pageUrl,r.ok&&r.text?{filename:rawData.filename,title:rawData.title,rawHtml:r.text}:{...rawData});}catch{rawPagesMapTablet.set(pageUrl,{...rawData});}
+      try{const r=await fetchWithTimeout(pageUrl,10000,tracker,'document',undefined,cookieJar,'mobile');rawPagesMapMobile.set(pageUrl,r.ok&&r.text?{filename:rawData.filename,title:rawData.title,rawHtml:r.text}:{...rawData});}catch{rawPagesMapMobile.set(pageUrl,{...rawData});}
+    }
   }
 
   const cssSections:string[]=[`@charset "UTF-8";\n/* Offline stylesheet for ${startUrlInput} */\n`]; const visitedCssUrls=new Set<string>(); const maxStyles=isCloudflare?4:100;
@@ -187,8 +193,7 @@ export async function scrapeWebPage(startUrlInput:string,mode:CrawlMode='single'
 
   const fileCssMain:ExtractedFile={id:'file-css-main',name:'styles.css',type:'css',content:combinedCss,size:new TextEncoder().encode(combinedCss).byteLength,description:`Extracted stylesheet (${discoveredStyles.length} discovered)`}; const fileJsMain:ExtractedFile={id:'file-js-main',name:'scripts.js',type:'javascript',content:combinedJs,size:new TextEncoder().encode(combinedJs).byteLength,description:`Extracted JavaScript (${discoveredScriptUrls.size} external scripts)`};
   const linksJsonContent=JSON.stringify({scrapedAt:new Date().toISOString(),targetUrl:startUrlInput,domain,offlineReady:true,pagesScanned:Array.from(visitedUrls),totalLinks:allScrapedLinks.length,totalHeadings:allScrapedHeadings.length,stylesDiscovered:discoveredStyles.length,embeddedAssetsCount:assetCache.size,links:allScrapedLinks,headings:allScrapedHeadings},null,2); const headingsCount:Record<HeadingLevel,number>={h1:0,h2:0,h3:0,h4:0,h5:0,h6:0};for(const h of allScrapedHeadings)headingsCount[h.level]++;
-  const fileJsonLinks:ExtractedFile={id:'file-json-links',name:'links.json',type:'json',content:linksJsonContent,size:new TextEncoder().encode(linksJsonContent).byteLength}; const headingsJsonContent=JSON.stringify({scrapedAt:new Date().toISOString(),targetUrl:startUrlInput,domain,totalHeadings:allScrapedHeadings.length,counts:headingsCount,headings:allScrapedHeadings},null,2); const fileJsonHeadings:ExtractedFile={id:'file-json-headings',name:'headings.json',type:'json',content:headingsJsonContent,size:new TextEncoder().encode(headingsJsonContent).byteLength};
-  const commonFiles=[fileCssMain,fileJsMain,fileJsonLinks,fileJsonHeadings]; const allDesktopFiles=[...filesDesktop,...commonFiles]; const allTabletFiles=isCloudflare?commonFiles:[...filesTablet,...commonFiles]; const allMobileFiles=isCloudflare?commonFiles:[...filesMobile,...commonFiles];
+  const fileJsonLinks:ExtractedFile={id:'file-json-links',name:'links.json',type:'json',content:linksJsonContent,size:new TextEncoder().encode(linksJsonContent).byteLength}; const headingsJsonContent=JSON.stringify({scrapedAt:new Date().toISOString(),targetUrl:startUrlInput,domain,totalHeadings:allScrapedHeadings.length,counts:headingsCount,headings:allScrapedHeadings},null,2); const fileJsonHeadings:ExtractedFile={id:'file-json-headings',name:'headings.json',type:'json',content:headingsJsonContent,size:new TextEncoder().encode(headingsJsonContent).byteLength}; const commonFiles=[fileCssMain,fileJsMain,fileJsonLinks,fileJsonHeadings]; const allDesktopFiles=[...filesDesktop,...commonFiles]; const allTabletFiles=isCloudflare?commonFiles:[...filesTablet,...commonFiles]; const allMobileFiles=isCloudflare?commonFiles:[...filesMobile,...commonFiles];
   const makeVersion=(device:DeviceType,files:ExtractedFile[]):DeviceVersion=>({device,title:`${siteTitle||domain} (${device})`,files,totalBytes:files.reduce((a,f)=>a+f.size,0),viewport:DEVICE_PROFILES[device].viewport,userAgent:DEVICE_PROFILES[device].userAgent});
   const internalCount=allScrapedLinks.filter(l=>l.type==='internal').length,externalCount=allScrapedLinks.filter(l=>l.type==='external').length;
   return {targetUrl:startUrlInput,mode,domain,title:siteTitle||domain,pagesScanned:visitedUrls.size,totalLinksFound:allScrapedLinks.length,internalLinksCount:internalCount,externalLinksCount:externalCount,links:allScrapedLinks,headings:allScrapedHeadings,totalHeadingsFound:allScrapedHeadings.length,headingsCount,files:allDesktopFiles,deviceVersions:{desktop:makeVersion('desktop',allDesktopFiles),tablet:makeVersion('tablet',allTabletFiles),mobile:makeVersion('mobile',allMobileFiles)},scannedUrls:Array.from(visitedUrls),executionTimeMs:Date.now()-startTime};
