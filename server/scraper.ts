@@ -1,10 +1,10 @@
 import * as cheerio from 'cheerio';
 import { ScrapedLink, ScrapedHeading, HeadingLevel, ExtractedFile, ScrapeResult, CrawlMode, LinkType } from '../src/types.js';
 
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 (Compatible WebScraperBot/2.0)';
+const CHROME_DESKTOP_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-// Known trackers to strip out for clean, error-free offline execution
+// Known trackers and ad networks to strip for clean offline execution
 const TRACKER_DOMAINS = [
   'google-analytics.com',
   'googletagmanager.com',
@@ -14,20 +14,42 @@ const TRACKER_DOMAINS = [
   'hotjar.com',
   'doubleclick.net',
   'pagead2.googlesyndication.com',
-  'yandex.ru/metrika',
+  'yandex.ru',
   'mc.yandex.ru',
   'adsbygoogle',
   'amplitude.com',
   'mixpanel.com',
   'segment.io',
+  'sentry.io',
+  'datadoghq.com',
+  'newrelic.com',
 ];
+
+const BROWSER_HEADERS: Record<string, string> = {
+  'User-Agent': CHROME_DESKTOP_UA,
+  'Accept-Language': 'en-US,en;q=0.9,fa;q=0.8',
+  'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+};
+
+// Check if running in Node.js runtime vs Cloudflare Workers
+const isNodeRuntime =
+  typeof process !== 'undefined' &&
+  process.versions != null &&
+  process.versions.node != null;
 
 export class SubrequestTracker {
   private count = 0;
   private readonly maxLimit: number;
 
-  constructor(maxLimit = 36) {
-    this.maxLimit = maxLimit;
+  constructor(maxLimit?: number) {
+    this.maxLimit = maxLimit ?? (isNodeRuntime ? 160 : 42);
   }
 
   canFetch(): boolean {
@@ -53,9 +75,10 @@ export class SubrequestTracker {
 
 async function fetchWithTimeout(
   url: string,
-  timeoutMs = 7000,
-  tracker?: SubrequestTracker
-): Promise<{ ok: boolean; status: number; text: string; contentType: string }> {
+  timeoutMs = 9000,
+  tracker?: SubrequestTracker,
+  customAccept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+): Promise<{ ok: boolean; status: number; text: string; contentType: string; finalUrl: string }> {
   if (tracker && !tracker.record()) {
     throw new Error(`Subrequest limit budget reached (max ${tracker.total})`);
   }
@@ -64,9 +87,8 @@ async function fetchWithTimeout(
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,text/css,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,fa;q=0.8',
+        ...BROWSER_HEADERS,
+        Accept: customAccept,
       },
       signal: controller.signal,
       redirect: 'follow',
@@ -74,7 +96,7 @@ async function fetchWithTimeout(
     clearTimeout(id);
     const contentType = res.headers.get('content-type') || '';
     const text = await res.text();
-    return { ok: res.ok, status: res.status, text, contentType };
+    return { ok: res.ok, status: res.status, text, contentType, finalUrl: res.url || url };
   } catch (err: any) {
     clearTimeout(id);
     throw new Error(`Failed to fetch ${url}: ${err.message}`);
@@ -83,7 +105,7 @@ async function fetchWithTimeout(
 
 async function fetchBinary(
   url: string,
-  timeoutMs = 4500,
+  timeoutMs = 6000,
   tracker?: SubrequestTracker
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   if (tracker && !tracker.record()) {
@@ -94,8 +116,10 @@ async function fetchBinary(
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': USER_AGENT,
+        'User-Agent': CHROME_DESKTOP_UA,
         Accept: '*/*',
+        'Sec-Fetch-Dest': 'image',
+        'Sec-Fetch-Mode': 'no-cors',
       },
       signal: controller.signal,
       redirect: 'follow',
@@ -113,8 +137,8 @@ async function fetchBinary(
     const arrayBuffer = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Limit individual asset to 1.5MB to protect worker memory
-    if (buffer.byteLength > 1.5 * 1024 * 1024) {
+    // Limit individual asset to 2MB to protect memory
+    if (buffer.byteLength > 2 * 1024 * 1024) {
       return null;
     }
 
@@ -180,7 +204,25 @@ function classifyLink(
 }
 
 /**
- * Recursively resolves @import rules and embeds all webfonts and images as Base64 Data URIs
+ * Universal stylesheet tester: accurately catches all variants of stylesheet link tags
+ * (e.g., 'preload stylesheet', 'stylesheet', 'alternate stylesheet', 'preload as=style', etc.)
+ */
+function isStylesheetLink(relAttr: string, asAttr: string, typeAttr: string, hrefAttr: string): boolean {
+  const rel = (relAttr || '').toLowerCase();
+  const as = (asAttr || '').toLowerCase();
+  const type = (typeAttr || '').toLowerCase();
+  const href = (hrefAttr || '').toLowerCase();
+
+  return (
+    rel.includes('stylesheet') ||
+    as === 'style' ||
+    type === 'text/css' ||
+    /\.css(\?.*)?$/i.test(href)
+  );
+}
+
+/**
+ * Recursively resolves @import rules and embeds webfonts and images as Base64 Data URIs
  * so the CSS has ZERO internet dependencies and renders identical offline.
  */
 async function processCssContent(
@@ -193,9 +235,10 @@ async function processCssContent(
 ): Promise<string> {
   if (depth > 3) return rawCss;
 
-  let processed = rawCss;
+  // Remove individual @charset directives so we can have a single unified one at file head
+  let processed = rawCss.replace(/@charset\s+['"][^'"]*['"];?/gi, '');
 
-  // 1. Resolve and inline @import rules (e.g., @import url("..."); or @import "...";)
+  // 1. Resolve and inline @import rules recursively
   const importRegex = /@import\s+(?:url\(\s*['"]?([^'")]+)['"]?\s*\)|['"]([^'"]+)['"])\s*([^;]*);/gi;
   const importMatches = [...processed.matchAll(importRegex)];
 
@@ -208,12 +251,12 @@ async function processCssContent(
     try {
       const resolvedImportUrl = new URL(importPath, cssBaseUrl).href;
       if (visitedCssUrls.has(resolvedImportUrl)) {
-        processed = processed.replace(fullStatement, `/* Prevented circular @import: ${resolvedImportUrl} */`);
+        processed = processed.replace(fullStatement, `/* Circular @import prevented: ${resolvedImportUrl} */`);
         continue;
       }
       visitedCssUrls.add(resolvedImportUrl);
 
-      const res = await fetchWithTimeout(resolvedImportUrl, 4500, tracker);
+      const res = await fetchWithTimeout(resolvedImportUrl, 7000, tracker, 'text/css,*/*;q=0.1');
       if (res.ok && res.text) {
         const nestedProcessed = await processCssContent(
           res.text,
@@ -225,7 +268,7 @@ async function processCssContent(
         );
         processed = processed.replace(
           fullStatement,
-          `\n/* ===== START INLINED IMPORT: ${resolvedImportUrl} ===== */\n${nestedProcessed}\n/* ===== END INLINED IMPORT ===== */\n`
+          `\n/* ===== INLINED IMPORT: ${resolvedImportUrl} ===== */\n${nestedProcessed}\n/* ===== END INLINED IMPORT ===== */\n`
         );
       } else {
         processed = processed.replace(
@@ -238,7 +281,7 @@ async function processCssContent(
     }
   }
 
-  // 2. Resolve url(...) references: fonts, background images, icons
+  // 2. Discover all url(...) asset paths in CSS (fonts, background images, icons)
   const urlRegex = /url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi;
   const urlMatches = [...processed.matchAll(urlRegex)];
 
@@ -255,50 +298,57 @@ async function processCssContent(
     }
   }
 
-  // Limit font and image embeds per stylesheet to conserve subrequests and memory
-  let fontEmbeds = 0;
+  // Pre-fetch fonts and images for offline embedding (prioritizing fonts and icons)
   for (const assetPath of distinctAssetPaths) {
+    if (!tracker.canFetch()) break;
     try {
       const resolvedAssetUrl = new URL(assetPath, cssBaseUrl).href;
-
-      let dataUri = assetCache.get(resolvedAssetUrl);
-      if (!dataUri && tracker.canFetch() && fontEmbeds < 4) {
-        const isEmbeddable = /\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|ico)(\?.*)?$/i.test(
-          resolvedAssetUrl
-        );
-
+      if (!assetCache.has(resolvedAssetUrl)) {
+        const isEmbeddable = /\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|ico)(\?.*)?$/i.test(resolvedAssetUrl);
         if (isEmbeddable) {
-          const binary = await fetchBinary(resolvedAssetUrl, 3500, tracker);
-          if (binary && binary.buffer.byteLength <= 1024 * 1024) {
-            fontEmbeds++;
+          const binary = await fetchBinary(resolvedAssetUrl, 5000, tracker);
+          if (binary && binary.buffer.byteLength <= 1.5 * 1024 * 1024) {
             const b64 = binary.buffer.toString('base64');
-            dataUri = `data:${binary.mimeType};base64,${b64}`;
+            const dataUri = `data:${binary.mimeType};base64,${b64}`;
             assetCache.set(resolvedAssetUrl, dataUri);
           }
         }
       }
-
-      const escapedPath = assetPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const replaceRegex = new RegExp(`url\\(\\s*(['"]?)${escapedPath}\\1\\s*\\)`, 'g');
-
-      if (dataUri) {
-        processed = processed.replace(replaceRegex, `url("${dataUri}")`);
-      } else {
-        // Fallback to absolute URL so relative path doesn't fail on local file://
-        processed = processed.replace(replaceRegex, `url("${resolvedAssetUrl}")`);
-      }
     } catch {}
   }
+
+  // 3. Fast, single-pass URL rewriting:
+  // Replaces all relative URLs with their Base64 Data URI (if cached), or their absolute URL.
+  // This GUARANTEES that zero relative paths are left broken in offline files!
+  processed = processed.replace(
+    /url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,
+    (fullMatch, _quote, rawUrl) => {
+      const trimmed = (rawUrl || '').trim();
+      if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('#') || trimmed.startsWith('blob:')) {
+        return fullMatch;
+      }
+      try {
+        const resolved = new URL(trimmed, cssBaseUrl).href;
+        const replacement = assetCache.get(resolved) || resolved;
+        return `url("${replacement}")`;
+      } catch {
+        return fullMatch;
+      }
+    }
+  );
 
   return processed;
 }
 
 /**
  * Transforms scraped HTML into a completely self-contained, 100% offline-compatible document:
- * 1. Replaces remote stylesheets with link to styles.css AND inlines the full CSS bundle
- * 2. Inlines HTML images as base64 data URIs so images render with ZERO internet connection
- * 3. Removes telemetry and ad scripts that cause offline console errors
- * 4. Adjusts internal links to point to local files
+ * 1. Discovers and removes all remote stylesheet links (preventing 404 network requests)
+ * 2. Links to local styles.css AND inlines the full CSS bundle inside <style id="offline-bundle-styles">
+ * 3. Rewrites URLs in inline <style> tags and element inline style="..." attributes
+ * 4. Inlines HTML images as base64 data URIs so images render with ZERO internet connection
+ * 5. Handles lazy-loaded images (data-src, data-lazy-src) and removes blocking attributes
+ * 6. Strips tracking scripts that throw offline errors
+ * 7. Links to local scripts.js
  */
 async function processHtmlForOffline(
   rawHtml: string,
@@ -313,8 +363,17 @@ async function processHtmlForOffline(
   // Remove <base> tag to allow local file:/// resolution
   $('base').remove();
 
-  // Remove remote stylesheet <link> tags
-  $('link[rel="stylesheet"], link[rel="preload"][as="style"]').remove();
+  // Remove ALL remote stylesheet links (including preload, alternate, modulepreload styles)
+  $('link').each((_, elem) => {
+    const rel = ($(elem).attr('rel') || '').toLowerCase();
+    const as = ($(elem).attr('as') || '').toLowerCase();
+    const type = ($(elem).attr('type') || '').toLowerCase();
+    const href = $(elem).attr('href') || $(elem).attr('data-href') || '';
+
+    if (isStylesheetLink(rel, as, type, href)) {
+      $(elem).remove();
+    }
+  });
 
   // Clean out analytics and tracking scripts
   $('script').each((_, elem) => {
@@ -328,44 +387,119 @@ async function processHtmlForOffline(
     }
   });
 
-  // Convert <img> tags to Base64 data URIs for true offline viewing (capped to keep subrequests under limit)
-  const maxImagesToInline = Math.min(8, tracker.remaining);
-  const imgElements = $('img').toArray().slice(0, maxImagesToInline);
+  // Rewrite URLs inside inline <style> blocks so they don't break offline
+  $('style').each((_, elem) => {
+    const originalCss = $(elem).html() || '';
+    if (originalCss) {
+      const rewritten = originalCss.replace(
+        /url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,
+        (fullMatch, _quote, rawUrl) => {
+          const trimmed = (rawUrl || '').trim();
+          if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('#')) return fullMatch;
+          try {
+            const resolved = new URL(trimmed, pageUrl).href;
+            const replacement = assetCache.get(resolved) || resolved;
+            return `url("${replacement}")`;
+          } catch {
+            return fullMatch;
+          }
+        }
+      );
+      $(elem).html(rewritten);
+    }
+  });
+
+  // Rewrite URLs in element style="..." attributes (e.g. style="background-image: url(...)")
+  $('[style*="url("]').each((_, elem) => {
+    const styleAttr = $(elem).attr('style') || '';
+    const rewritten = styleAttr.replace(
+      /url\(\s*(['"]?)([^'"()]+)\1\s*\)/gi,
+      (fullMatch, _quote, rawUrl) => {
+        const trimmed = (rawUrl || '').trim();
+        if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('#')) return fullMatch;
+        try {
+          const resolved = new URL(trimmed, pageUrl).href;
+          const replacement = assetCache.get(resolved) || resolved;
+          return `url("${replacement}")`;
+        } catch {
+          return fullMatch;
+        }
+      }
+    );
+    $(elem).attr('style', rewritten);
+  });
+
+  // Process and convert <img> tags for true offline viewing
+  const imgElements = $('img').toArray();
   for (const elem of imgElements) {
-    if (!tracker.canFetch()) break;
-    const src = $(elem).attr('src') || $(elem).attr('data-src');
+    let src = $(elem).attr('src') || '';
+    const dataSrc =
+      $(elem).attr('data-src') ||
+      $(elem).attr('data-lazy-src') ||
+      $(elem).attr('data-original') ||
+      $(elem).attr('data-src-retina');
+
+    // If src is a placeholder (1px gif or empty data-uri), prefer dataSrc
+    if ((!src || src.startsWith('data:image/svg') || src.startsWith('data:image/gif')) && dataSrc) {
+      src = dataSrc;
+      $(elem).attr('src', dataSrc);
+    }
+
     if (src && !src.startsWith('data:')) {
       try {
         const resolvedImgUrl = new URL(src, pageUrl).href;
         let dataUri = assetCache.get(resolvedImgUrl);
-        if (!dataUri) {
-          const binary = await fetchBinary(resolvedImgUrl, 3500, tracker);
-          if (binary && binary.buffer.byteLength <= 1024 * 1024) {
+
+        // Fetch image if within subrequest budget
+        if (!dataUri && tracker.canFetch()) {
+          const binary = await fetchBinary(resolvedImgUrl, 5000, tracker);
+          if (binary && binary.buffer.byteLength <= 1.5 * 1024 * 1024) {
             const b64 = binary.buffer.toString('base64');
             dataUri = `data:${binary.mimeType};base64,${b64}`;
             assetCache.set(resolvedImgUrl, dataUri);
           }
         }
+
         if (dataUri) {
           $(elem).attr('src', dataUri);
           $(elem).removeAttr('srcset');
-          $(elem).removeAttr('data-src');
-          $(elem).removeAttr('loading');
+        } else {
+          // Fallback to absolute URL so it never breaks with a relative 404
+          $(elem).attr('src', resolvedImgUrl);
         }
+
+        // Clean up lazy-load markers that block offline rendering
+        $(elem).removeAttr('data-src');
+        $(elem).removeAttr('data-lazy-src');
+        $(elem).removeAttr('data-original');
+        $(elem).attr('loading', 'eager');
+        $(elem).attr('decoding', 'async');
+        $(elem).attr('referrerpolicy', 'no-referrer');
       } catch {}
     }
   }
 
-  // Convert <link rel="icon">
+  // Also process <source> tags inside <picture>
+  $('picture source').each((_, elem) => {
+    const srcset = $(elem).attr('srcset') || $(elem).attr('data-srcset');
+    if (srcset && !srcset.startsWith('data:')) {
+      try {
+        const firstUrl = srcset.trim().split(/\s+/)[0];
+        const resolved = new URL(firstUrl, pageUrl).href;
+        const cached = assetCache.get(resolved) || resolved;
+        $(elem).attr('srcset', cached);
+      } catch {}
+    }
+  });
+
+  // Convert <link rel="icon"> and <link rel="apple-touch-icon">
   $('link[rel*="icon"]').each((_, elem) => {
     const href = $(elem).attr('href');
     if (href && !href.startsWith('data:')) {
       try {
         const resolvedFavicon = new URL(href, pageUrl).href;
-        const cached = assetCache.get(resolvedFavicon);
-        if (cached) {
-          $(elem).attr('href', cached);
-        }
+        const cached = assetCache.get(resolvedFavicon) || resolvedFavicon;
+        $(elem).attr('href', cached);
       } catch {}
     }
   });
@@ -390,13 +524,22 @@ async function processHtmlForOffline(
     $('html').prepend('<head></head>');
   }
 
+  // Ensure UTF-8 charset and responsive viewport are in <head>
+  if ($('meta[charset]').length === 0) {
+    $('head').prepend('<meta charset="UTF-8">\n');
+  }
+  if ($('meta[name="viewport"]').length === 0) {
+    $('head').append('<meta name="viewport" content="width=device-width, initial-scale=1.0">\n');
+  }
+
   // 1. Link to local styles.css
   $('head').append('  <link rel="stylesheet" href="styles.css">\n');
 
   // 2. Also inject full CSS directly inside <style id="offline-bundle-styles">
-  // This guarantees that even if index.html is downloaded alone or moved, it renders 100% styled offline!
+  // Safely escape </style> so it cannot break HTML document parsing
+  const safeCss = combinedCss.replace(/<\/style>/gi, '<\\/style>');
   $('head').append(
-    `  <style id="offline-bundle-styles">\n/* =========================================================\n   100% OFFLINE BUNDLE - ZERO INTERNET CONNECTION REQUIRED\n   All external stylesheets, fonts, and assets inlined.\n========================================================= */\n${combinedCss}\n  </style>\n`
+    `  <style id="offline-bundle-styles">\n/* =========================================================\n   100% OFFLINE BUNDLE - ZERO INTERNET CONNECTION REQUIRED\n   All external stylesheets, webfonts, and assets inlined.\n========================================================= */\n${safeCss}\n  </style>\n`
   );
 
   // 3. Link to scripts.js at bottom of body
@@ -415,12 +558,13 @@ export async function scrapeWebPage(
 ): Promise<ScrapeResult> {
   const startTime = Date.now();
   let parsedStartUrl: URL;
+  let normalizedInput = startUrlInput.trim();
+  if (!/^https?:\/\//i.test(normalizedInput)) {
+    normalizedInput = 'https://' + normalizedInput;
+  }
+
   try {
-    let urlString = startUrlInput.trim();
-    if (!/^https?:\/\//i.test(urlString)) {
-      urlString = 'https://' + urlString;
-    }
-    parsedStartUrl = new URL(urlString);
+    parsedStartUrl = new URL(normalizedInput);
   } catch {
     throw new Error(`Invalid URL provided: ${startUrlInput}`);
   }
@@ -438,16 +582,24 @@ export async function scrapeWebPage(
   const rawPagesMap = new Map<string, { filename: string; title: string; rawHtml: string }>();
   const pageMapping = new Map<string, string>(); // url -> filename
 
-  const allStylesheetUrls = new Set<string>();
-  const allInlineStyles: { source: string; content: string }[] = [];
-  const allScriptUrls = new Set<string>();
-  const allInlineScripts: { source: string; content: string }[] = [];
+  // Structured record of styles discovered in document order
+  interface DiscoveredStyle {
+    type: 'external' | 'inline';
+    url?: string;
+    content?: string;
+    media?: string;
+    source: string;
+  }
+
+  const discoveredStyles: DiscoveredStyle[] = [];
+  const discoveredScriptUrls = new Set<string>();
+  const discoveredInlineScripts: { source: string; content: string }[] = [];
 
   const assetCache = new Map<string, string>(); // url -> dataUri
   let siteTitle = '';
 
-  // Cloudflare Workers free tier allows max 50 subrequests. Keep a strict budget of 36 to guarantee safety.
-  const tracker = new SubrequestTracker(36);
+  // Adaptive subrequest budgeting: Node.js (full capacity up to 160) vs Workers (safe budget up to 42)
+  const tracker = new SubrequestTracker();
 
   const maxPagesToCrawl = mode === 'single' ? 1 : Math.min(Math.max(1, maxPages), 20);
 
@@ -456,13 +608,23 @@ export async function scrapeWebPage(
     const currentUrl = toVisitQueue.shift()!;
     const normalizedUrl = currentUrl.split('#')[0];
 
-    if (visitedUrls.has(normalizedUrl)) {
-      continue;
-    }
+    if (visitedUrls.has(normalizedUrl)) continue;
     visitedUrls.add(normalizedUrl);
 
     try {
-      const response = await fetchWithTimeout(currentUrl, 8000, tracker);
+      let response: { ok: boolean; status: number; text: string; contentType: string; finalUrl: string };
+      try {
+        response = await fetchWithTimeout(currentUrl, 10000, tracker);
+      } catch (firstErr: any) {
+        // If HTTPS fails and was auto-prepended, try HTTP fallback
+        if (currentUrl.startsWith('https://') && !startUrlInput.startsWith('https://')) {
+          const httpUrl = currentUrl.replace(/^https:\/\//i, 'http://');
+          response = await fetchWithTimeout(httpUrl, 10000, tracker);
+        } else {
+          throw firstErr;
+        }
+      }
+
       if (!response.ok) continue;
 
       const html = response.text;
@@ -515,7 +677,7 @@ export async function scrapeWebPage(
         }
       });
 
-      // 1.5. Discover and extract all headings (H1 to H6)
+      // 2. Discover all headings (H1 to H6)
       $('h1, h2, h3, h4, h5, h6').each((_, elem) => {
         const tagName = (((elem as any).tagName || (elem as any).name || '') as string).toLowerCase() as HeadingLevel;
         const headingText = $(elem).text().replace(/\s+/g, ' ').trim();
@@ -531,35 +693,52 @@ export async function scrapeWebPage(
         }
       });
 
-      // 2. Discover ALL stylesheets (no arbitrary cap)
-      $('link[rel="stylesheet"], link[rel="preload"][as="style"]').each((_, elem) => {
-        const href = $(elem).attr('href');
-        if (href) {
-          try {
-            allStylesheetUrls.add(new URL(href, currentUrl).href);
-          } catch {}
+      // 3. Discover ALL stylesheets in document order (both external link and inline style tags)
+      $('link, style').each((idx, elem) => {
+        const tagName = (((elem as any).tagName || (elem as any).name || '') as string).toLowerCase();
+        if (tagName === 'link') {
+          const rel = ($(elem).attr('rel') || '').toLowerCase();
+          const as = ($(elem).attr('as') || '').toLowerCase();
+          const type = ($(elem).attr('type') || '').toLowerCase();
+          const href = $(elem).attr('href') || $(elem).attr('data-href');
+          const media = $(elem).attr('media')?.trim();
+
+          if (href && isStylesheetLink(rel, as, type, href)) {
+            try {
+              const fullCssUrl = new URL(href, currentUrl).href;
+              // Avoid duplicate external stylesheets
+              if (!discoveredStyles.some((s) => s.url === fullCssUrl)) {
+                discoveredStyles.push({
+                  type: 'external',
+                  url: fullCssUrl,
+                  media,
+                  source: `${fileName} (<link href="${href}">)`,
+                });
+              }
+            } catch {}
+          }
+        } else if (tagName === 'style') {
+          const styleText = $(elem).html()?.trim();
+          const media = $(elem).attr('media')?.trim();
+          if (styleText) {
+            discoveredStyles.push({
+              type: 'inline',
+              content: styleText,
+              media,
+              source: `${fileName} (<style #${idx + 1}>)`,
+            });
+          }
         }
       });
 
-      // 3. Extract all inline <style>
-      $('style').each((idx, elem) => {
-        const styleText = $(elem).html()?.trim();
-        if (styleText) {
-          allInlineStyles.push({
-            source: `${fileName} (inline style #${idx + 1})`,
-            content: styleText,
-          });
-        }
-      });
-
-      // 4. Discover all script tags
+      // 4. Discover all external scripts
       $('script[src]').each((_, elem) => {
-        const src = $(elem).attr('src');
+        const src = $(elem).attr('src') || $(elem).attr('data-src');
         if (src) {
           const isTracker = TRACKER_DOMAINS.some((t) => src.includes(t));
           if (!isTracker) {
             try {
-              allScriptUrls.add(new URL(src, currentUrl).href);
+              discoveredScriptUrls.add(new URL(src, currentUrl).href);
             } catch {}
           }
         }
@@ -578,7 +757,7 @@ export async function scrapeWebPage(
           if (scriptText && scriptText.length > 5) {
             const isTracker = TRACKER_DOMAINS.some((t) => scriptText.includes(t));
             if (!isTracker) {
-              allInlineScripts.push({
+              discoveredInlineScripts.push({
                 source: `${fileName} (inline script #${idx + 1})`,
                 content: scriptText,
               });
@@ -595,82 +774,96 @@ export async function scrapeWebPage(
   // COMPLETE CSS EXTRACTION & OFFLINE PREPARATION
   // ==========================================================
   const cssSections: string[] = [
-    `/* ========================================================================\n   OFFLINE-READY STYLESHEET (100% SELF-CONTAINED)\n   Generated for: ${startUrlInput}\n   Extracted on: ${new Date().toUTCString()}\n   Zero Internet Dependencies: All @imports inlined, fonts/icons embedded as Base64 Data URIs.\n======================================================================== */\n`,
+    `@charset "UTF-8";\n/* ========================================================================\n   OFFLINE-READY STYLESHEET (100% SELF-CONTAINED)\n   Generated for: ${startUrlInput}\n   Extracted on: ${new Date().toUTCString()}\n   Zero Internet Dependencies: All @imports inlined, fonts/icons embedded as Base64 Data URIs.\n======================================================================== */\n`,
   ];
 
   const visitedCssUrls = new Set<string>();
 
-  // Fetch external stylesheets (capped to 8 to avoid exhausting Cloudflare subrequests)
-  const stylesheetUrlArray = Array.from(allStylesheetUrls).slice(0, 8);
-  for (const cssUrl of stylesheetUrlArray) {
-    if (visitedCssUrls.has(cssUrl) || !tracker.canFetch()) continue;
-    visitedCssUrls.add(cssUrl);
+  // Process all discovered stylesheets in their natural cascade order
+  for (const item of discoveredStyles) {
+    if (item.type === 'external' && item.url) {
+      if (visitedCssUrls.has(item.url)) continue;
+      visitedCssUrls.add(item.url);
 
-    try {
-      const cssRes = await fetchWithTimeout(cssUrl, 5000, tracker);
-      if (cssRes.ok && cssRes.text) {
-        const processedCss = await processCssContent(
-          cssRes.text,
-          cssUrl,
+      if (!tracker.canFetch()) {
+        cssSections.push(`/* Note: Skipped external stylesheet ${item.url} due to budget limits */\n`);
+        continue;
+      }
+
+      try {
+        const cssRes = await fetchWithTimeout(item.url, 8000, tracker, 'text/css,*/*;q=0.1');
+        if (cssRes.ok && cssRes.text) {
+          let processedCss = await processCssContent(
+            cssRes.text,
+            item.url,
+            visitedCssUrls,
+            assetCache,
+            tracker,
+            0
+          );
+
+          // Wrap in @media block if media query specified (e.g. print or screen size)
+          if (item.media && item.media !== 'all' && item.media !== 'screen') {
+            processedCss = `@media ${item.media} {\n${processedCss}\n}`;
+          }
+
+          cssSections.push(
+            `/* ------------------------------------------------------------------------\n   Styles from External Stylesheet: ${item.url}\n------------------------------------------------------------------------ */\n${processedCss}\n`
+          );
+        }
+      } catch {
+        cssSections.push(`/* Note: Could not fetch stylesheet ${item.url} */\n`);
+      }
+    } else if (item.type === 'inline' && item.content) {
+      try {
+        let processedInline = await processCssContent(
+          item.content,
+          parsedStartUrl.href,
           visitedCssUrls,
           assetCache,
           tracker,
           0
         );
-        cssSections.push(
-          `/* ------------------------------------------------------------------------\n   Styles from External Stylesheet: ${cssUrl}\n------------------------------------------------------------------------ */\n${processedCss}\n`
-        );
-      }
-    } catch {
-      cssSections.push(`/* Note: Could not fetch stylesheet ${cssUrl} */\n`);
-    }
-  }
 
-  // Append all inline <style> tags
-  for (const inlineStyle of allInlineStyles) {
-    try {
-      const processedInline = await processCssContent(
-        inlineStyle.content,
-        parsedStartUrl.href,
-        visitedCssUrls,
-        assetCache,
-        tracker,
-        0
-      );
-      cssSections.push(
-        `/* ------------------------------------------------------------------------\n   Inline Style from: ${inlineStyle.source}\n------------------------------------------------------------------------ */\n${processedInline}\n`
-      );
-    } catch {
-      cssSections.push(`/* Note: Failed to process inline style from ${inlineStyle.source} */\n`);
+        if (item.media && item.media !== 'all' && item.media !== 'screen') {
+          processedInline = `@media ${item.media} {\n${processedInline}\n}`;
+        }
+
+        cssSections.push(
+          `/* ------------------------------------------------------------------------\n   Inline Style from: ${item.source}\n------------------------------------------------------------------------ */\n${processedInline}\n`
+        );
+      } catch {
+        cssSections.push(`/* Note: Failed to process inline style from ${item.source} */\n`);
+      }
     }
   }
 
   const combinedCss = cssSections.join('\n\n');
 
   // ==========================================================
-  // JAVASCRIPT EXTRACTION
+  // JAVASCRIPT BUNDLE FOR OFFLINE INTERACTIVITY
   // ==========================================================
   const jsSections: string[] = [
     `// ========================================================================\n// OFFLINE JAVASCRIPT BUNDLE\n// Extracted from ${startUrlInput}\n// ========================================================================\n`,
   ];
 
-  for (const jsUrl of Array.from(allScriptUrls).slice(0, 6)) {
+  // Fetch external scripts (prioritized to key UI libraries)
+  for (const jsUrl of Array.from(discoveredScriptUrls).slice(0, 10)) {
     if (!tracker.canFetch()) break;
     try {
-      const jsRes = await fetchWithTimeout(jsUrl, 4000, tracker);
-      if (jsRes.ok && jsRes.text && jsRes.text.length < 500000) {
+      const jsRes = await fetchWithTimeout(jsUrl, 6000, tracker, '*/*');
+      if (jsRes.ok && jsRes.text && jsRes.text.length < 800000) {
         jsSections.push(
           `// --- Script from ${jsUrl} ---\n(function(){\ntry {\n${jsRes.text}\n} catch(e){ console.warn("Error in script ${jsUrl}:", e); }\n})();\n`
         );
       }
-    } catch {
-      jsSections.push(`// Note: Could not fetch script ${jsUrl}\n`);
-    }
+    } catch {}
   }
 
-  for (const inlineScript of allInlineScripts) {
+  // Include extracted inline scripts
+  for (const inlineScript of discoveredInlineScripts) {
     jsSections.push(
-      `// --- Inline script: ${inlineScript.source} ---\n(function(){\ntry {\n${inlineScript.content}\n} catch(e){ console.warn("Error in inline script:", e); }\n})();\n`
+      `// --- ${inlineScript.source} ---\n(function(){\ntry {\n${inlineScript.content}\n} catch(e){ console.warn("Error in inline script ${inlineScript.source}:", e); }\n})();\n`
     );
   }
 
@@ -709,7 +902,7 @@ export async function scrapeWebPage(
     type: 'css',
     content: combinedCss,
     size: Buffer.byteLength(combinedCss, 'utf-8'),
-    description: `Complete offline stylesheet (${allStylesheetUrls.size} external stylesheets + ${allInlineStyles.length} inline styles)`,
+    description: `Complete offline stylesheet (${discoveredStyles.length} styles merged with embedded fonts/assets)`,
   });
 
   // Add scripts.js
@@ -719,7 +912,7 @@ export async function scrapeWebPage(
     type: 'javascript',
     content: combinedJs,
     size: Buffer.byteLength(combinedJs, 'utf-8'),
-    description: `Extracted JavaScript bundle (${allScriptUrls.size} external scripts + ${allInlineScripts.length} inline scripts)`,
+    description: `Extracted JavaScript bundle (${discoveredScriptUrls.size} external scripts + ${discoveredInlineScripts.length} inline scripts)`,
   });
 
   // Add links_report.html
@@ -805,8 +998,7 @@ export async function scrapeWebPage(
       pagesScanned: Array.from(visitedUrls),
       totalLinks: allScrapedLinks.length,
       totalHeadings: allScrapedHeadings.length,
-      stylesheetsExtracted: allStylesheetUrls.size,
-      inlineStylesExtracted: allInlineStyles.length,
+      stylesDiscovered: discoveredStyles.length,
       links: allScrapedLinks,
       headings: allScrapedHeadings,
     },
