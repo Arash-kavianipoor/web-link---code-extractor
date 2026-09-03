@@ -1,224 +1,233 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check, Search, X, Sun, Moon } from 'lucide-react';
-import { Language } from '../types.js';
-import { translations, SUPPORTED_LANGUAGES, getLanguageInfo } from '../i18n.js';
-import { CountryFlag } from './CountryFlag.js';
-import siteLogo from '../assets/logo.webp';
+import React, { useState } from 'react';
+import { useI18n } from '../i18n/I18nContext';
+import { LanguageCode } from '../types';
+import { 
+  Globe, 
+  Layers, 
+  Monitor, 
+  Tablet, 
+  Smartphone, 
+  Cpu, 
+  ChevronDown, 
+  Check, 
+  Sparkles,
+  Download
+} from 'lucide-react';
 
 interface HeaderProps {
-  language: Language;
-  onLanguageChange: (lang: Language) => void;
-  theme?: 'dark' | 'light';
-  onToggleTheme?: () => void;
+  viewMode: 'triple' | 'desktop' | 'tablet' | 'mobile' | 'split';
+  setViewMode: (mode: 'triple' | 'desktop' | 'tablet' | 'mobile' | 'split') => void;
+  onOpenBrowserNotice: () => void;
+  hasExtractedData: boolean;
+  onQuickDownloadAll?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  language,
-  onLanguageChange,
-  theme = 'dark',
-  onToggleTheme,
+  viewMode,
+  setViewMode,
+  onOpenBrowserNotice,
+  hasExtractedData,
+  onQuickDownloadAll,
 }) => {
-  const t = translations[language];
-  const currentLang = getLanguageInfo(language);
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { currentLanguage, languageInfo, setLanguage, availableLanguages, t, dir } = useI18n();
+  const [isLangOpen, setIsLangOpen] = useState(false);
+  const [langSearch, setLangSearch] = useState('');
 
-  // Close dropdown on outside click or escape
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen]);
-
-  const filteredLanguages = SUPPORTED_LANGUAGES.filter((item) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.nativeName.toLowerCase().includes(q) ||
-      item.code.toLowerCase().includes(q)
-    );
-  });
-
-  const handleSelectLanguage = (langCode: Language) => {
-    onLanguageChange(langCode);
-    setIsOpen(false);
-    setSearchQuery('');
-  };
+  const filteredLanguages = availableLanguages.filter(
+    (l) =>
+      l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
+      l.nativeName.toLowerCase().includes(langSearch.toLowerCase()) ||
+      l.code.toLowerCase().includes(langSearch.toLowerCase())
+  );
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 shadow-lg shadow-black/20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
-        {/* Left: Brand Icon & Title */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-800/80 border border-slate-700/60 shadow-lg shadow-indigo-500/10 shrink-0">
-            <img src={siteLogo} alt="Site Logo" className="w-full h-full object-cover" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent leading-none truncate">
-              {t.appTitle}
-            </h1>
-            <p className="text-xs text-slate-400 mt-1 hidden md:block truncate max-w-xl">
-              {t.appSubtitle}
-            </p>
-          </div>
-        </div>
-
-        {/* Right: Theme Switcher & Full 20 World Languages Selector Dropdown */}
-        <div className="flex items-center gap-2.5 shrink-0" ref={dropdownRef}>
-          {/* Dark / Light Mode Switch */}
-          <button
-            id="theme-toggle-btn"
-            type="button"
-            onClick={onToggleTheme}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 text-slate-200 text-xs font-semibold border border-slate-700 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-            title={
-              theme === 'light'
-                ? language === 'fa'
-                  ? 'تغییر به حالت تاریک'
-                  : 'Switch to Dark Mode'
-                : language === 'fa'
-                ? 'تغییر به حالت روشن'
-                : 'Switch to Light Mode'
-            }
-            aria-label={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-          >
-            {theme === 'light' ? (
-              <>
-                <Sun className="w-4 h-4 text-amber-500 shrink-0" />
-                <span className="font-medium hidden sm:inline">
-                  {language === 'fa' ? 'روشن' : 'Light'}
+    <header className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-md border-b border-slate-800 shadow-xl">
+      <div className="max-w-[1700px] mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-16 sm:h-20 gap-4">
+          
+          {/* Logo & App Title */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-600/30">
+              <Layers className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
+                  SCRAPE<span className="text-blue-400">ENGINE</span>
+                </h1>
+                <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  STUDIO v2.5
                 </span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="font-medium hidden sm:inline">
-                  {language === 'fa' ? 'تاریک' : 'Dark'}
-                </span>
-              </>
-            )}
-          </button>
+              </div>
+              <p className="text-[11px] text-slate-400 max-w-xs truncate hidden md:block">
+                {t.appSubtitle}
+              </p>
+            </div>
+          </div>
 
-          {/* Full 20 World Languages Selector Dropdown */}
-          <div className="relative">
+          {/* Center: Device View Controls */}
+          <div className="hidden lg:flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800">
             <button
-              id="language-selector-dropdown-btn"
-              type="button"
-              onClick={() => setIsOpen(!isOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 text-slate-200 text-xs font-semibold border border-slate-700 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-              aria-expanded={isOpen}
-              aria-haspopup="true"
+              id="btn-view-triple"
+              onClick={() => setViewMode('triple')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'triple'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+              title={t.viewTriple}
             >
-              <span className="inline-flex items-center justify-center shrink-0 drop-shadow-sm">
-                <CountryFlag language={language} size="sm" />
-              </span>
-              <span className="font-medium">{currentLang.nativeName}</span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                  isOpen ? 'rotate-180 text-indigo-400' : ''
-                }`}
-              />
+              <Layers className="w-3.5 h-3.5" />
+              <span>{t.viewTriple}</span>
             </button>
 
-            {/* Dropdown Menu Modal */}
-            {isOpen && (
-              <div
-                id="language-selector-menu"
-                className="absolute right-0 rtl:right-auto rtl:left-0 mt-2 w-72 sm:w-80 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl shadow-black/80 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl"
-              >
-                {/* Search Bar inside Language Menu */}
-                <div className="px-3 pb-2 border-b border-slate-800">
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 rtl:left-auto rtl:right-2.5 top-2.5 pointer-events-none" />
-                    <input
-                      id="language-search-input"
-                      type="text"
-                      autoFocus
-                      placeholder={t.searchLanguage || 'Search 20 world languages...'}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-slate-950/90 border border-slate-700/80 rounded-lg pl-8 pr-7 rtl:pl-7 rtl:pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-2 rtl:right-auto rtl:left-2 top-2 text-slate-400 hover:text-slate-200"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+            <button
+              id="btn-view-desktop"
+              onClick={() => setViewMode('desktop')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'desktop'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+              title={t.viewDesktop}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              <span>{t.viewDesktop}</span>
+            </button>
 
-                {/* 20 Languages List */}
-                <div className="max-h-72 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-                  {filteredLanguages.length === 0 ? (
-                    <div className="px-3 py-4 text-center text-xs text-slate-500">
-                      No matching language found
+            <button
+              id="btn-view-tablet"
+              onClick={() => setViewMode('tablet')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'tablet'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+              title={t.viewTablet}
+            >
+              <Tablet className="w-3.5 h-3.5" />
+              <span>{t.viewTablet}</span>
+            </button>
+
+            <button
+              id="btn-view-mobile"
+              onClick={() => setViewMode('mobile')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === 'mobile'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+              title={t.viewMobile}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>{t.viewMobile}</span>
+            </button>
+          </div>
+
+          {/* Right Actions: Engine Badge, Quick ZIP, Language Selector */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            
+            {/* Browser Engine Badge / Notice Trigger */}
+            <button
+              id="btn-engine-status"
+              onClick={onOpenBrowserNotice}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-900 border border-slate-800 text-slate-300 hover:border-slate-700 text-xs font-medium transition-colors"
+              title="ChromeDriver / Playwright Browser Engine Status"
+            >
+              <Cpu className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">{t.engineBadge}</span>
+            </button>
+
+            {/* Quick Download Button if data extracted */}
+            {hasExtractedData && onQuickDownloadAll && (
+              <button
+                id="btn-quick-download"
+                onClick={onQuickDownloadAll}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/30"
+                title={t.downloadMasterZip}
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">{t.downloadMasterZip}</span>
+              </button>
+            )}
+
+            {/* 20 Languages Selector Dropdown */}
+            <div className="relative">
+              <button
+                id="btn-language-selector"
+                onClick={() => setIsLangOpen(!isLangOpen)}
+                className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-md text-slate-200 text-xs transition-colors"
+                aria-label="Language selector"
+              >
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-base leading-none">{languageInfo.flag}</span>
+                <span className="text-xs text-slate-300 font-medium">{languageInfo.code.toUpperCase()}</span>
+                <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${isLangOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isLangOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsLangOpen(false)}
+                  />
+                  <div
+                    className={`absolute ${dir === 'rtl' ? 'left-0' : 'right-0'} mt-2 w-64 bg-[#0f172a] border border-slate-800 rounded-xl shadow-2xl py-2 z-50 text-xs`}
+                  >
+                    <div className="px-3 pb-2 border-b border-slate-800">
+                      <p className="text-[11px] font-semibold text-slate-400 mb-1.5">
+                        20 World Languages (زبان‌ها / Languages)
+                      </p>
+                      <input
+                        type="text"
+                        placeholder="Search language / جستجو..."
+                        value={langSearch}
+                        onChange={(e) => setLangSearch(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                        autoFocus
+                      />
                     </div>
-                  ) : (
-                    filteredLanguages.map((item) => {
-                      const isSelected = language === item.code;
-                      return (
-                        <button
-                          key={item.code}
-                          id={`select-lang-${item.code}`}
-                          type="button"
-                          onClick={() => handleSelectLanguage(item.code)}
-                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-indigo-600/90 text-white font-semibold shadow-md shadow-indigo-950/50'
-                              : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="inline-flex items-center justify-center shrink-0 drop-shadow-sm">
-                              <CountryFlag language={item.code} size="sm" />
-                            </span>
-                            <div className="text-left rtl:text-right min-w-0">
-                              <div className="truncate font-medium">{item.nativeName}</div>
-                              <div className="text-[10px] text-slate-400 truncate opacity-80">
-                                {item.name}
+
+                    <div className="max-h-60 overflow-y-auto py-1">
+                      {filteredLanguages.map((lang) => {
+                        const isSelected = lang.code === currentLanguage;
+                        return (
+                          <button
+                            key={lang.code}
+                            id={`lang-opt-${lang.code}`}
+                            onClick={() => {
+                              setLanguage(lang.code as LanguageCode);
+                              setIsLangOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800 text-left transition-colors ${
+                              isSelected ? 'bg-blue-600/20 text-blue-300 font-semibold' : 'text-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-base">{lang.flag}</span>
+                              <div>
+                                <div className="text-xs font-medium text-slate-100">{lang.nativeName}</div>
+                                <div className="text-[10px] text-slate-400">{lang.name} ({lang.code.toUpperCase()})</div>
                               </div>
                             </div>
-                          </div>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-white shrink-0 ml-2 rtl:ml-0 rtl:mr-2" />
-                          )}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                          </button>
+                        );
+                      })}
+                      {filteredLanguages.length === 0 && (
+                        <div className="px-3 py-4 text-center text-slate-500 text-xs">
+                          No language found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
-                {/* Footer Count Note */}
-                <div className="px-3 pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex items-center justify-between">
-                  <span>20 World Languages</span>
-                  <span className="text-emerald-400 font-mono">0ms switch</span>
-                </div>
-              </div>
-            )}
           </div>
+
         </div>
       </div>
     </header>
