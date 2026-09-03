@@ -1,4 +1,20 @@
-export const en = {
+export interface DeviceTranslations {
+  downloadDesktopZip?: string;
+  downloadTabletZip?: string;
+  downloadMobileZip?: string;
+  downloadAllDevicesZip?: string;
+  deviceDesktop?: string;
+  deviceTablet?: string;
+  deviceMobile?: string;
+  deviceAll?: string;
+  deviceVersionTitle?: string;
+  deviceVersionDesc?: string;
+  activeDeviceLabel?: string;
+  badgeDeviceEmulation?: string;
+  deviceZipDownloaded?: string;
+}
+
+const enBase = {
   appTitle: 'Web Link & Code Extractor',
   appSubtitle: 'Extract web links, complete CSS stylesheets, HTML & JS with zero-internet offline execution and ZIP export',
   urlLabel: 'Target Webpage URL',
@@ -137,4 +153,21 @@ export const en = {
   paginationHeadings: 'headings',
 };
 
-export type TranslationType = typeof en;
+export const en: typeof enBase & DeviceTranslations = {
+  ...enBase,
+  downloadDesktopZip: 'Download Desktop (ZIP)',
+  downloadTabletZip: 'Download Tablet (ZIP)',
+  downloadMobileZip: 'Download Mobile (ZIP)',
+  downloadAllDevicesZip: 'Download All 3 Versions (Complete Bundle)',
+  deviceDesktop: 'Desktop',
+  deviceTablet: 'Tablet',
+  deviceMobile: 'Mobile',
+  deviceAll: 'All 3 Devices',
+  deviceVersionTitle: '3 Device Versions Available',
+  deviceVersionDesc: 'Fetched with authentic Desktop, Tablet, and Mobile browser emulation to capture responsive layouts, media, and navigation.',
+  activeDeviceLabel: 'Current Device View',
+  badgeDeviceEmulation: '3x DEVICE EMULATION',
+  deviceZipDownloaded: 'Device package downloaded successfully!',
+};
+
+export type TranslationType = typeof enBase & DeviceTranslations;

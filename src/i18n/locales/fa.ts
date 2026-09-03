@@ -137,4 +137,19 @@ export const fa: TranslationType = {
   paginationOf: 'از',
   paginationLinks: 'پیوند',
   paginationHeadings: 'سرتیتر',
+
+  // Device-specific translations
+  downloadDesktopZip: 'دانلود نسخه دسکتاپ (ZIP)',
+  downloadTabletZip: 'دانلود نسخه تبلت (ZIP)',
+  downloadMobileZip: 'دانلود نسخه موبایل (ZIP)',
+  downloadAllDevicesZip: 'دانلود هر ۳ نسخه (پکیج جامع ZIP)',
+  deviceDesktop: 'دسکتاپ',
+  deviceTablet: 'تبلت',
+  deviceMobile: 'موبایل',
+  deviceAll: 'هر ۳ نسخه',
+  deviceVersionTitle: '۳ نسخه مجزا (دسکتاپ، تبلت، موبایل)',
+  deviceVersionDesc: 'واکشی اختصاصی با شبیه‌سازی رفتار مرورگر در ۳ حالت دسکتاپ، تبلت و موبایل جهت دریافت ساختار و المان‌های واکنش‌گرا.',
+  activeDeviceLabel: 'حالت نمایش فعال',
+  badgeDeviceEmulation: 'شبیه‌سازی ۳ گانه مرورگر',
+  deviceZipDownloaded: 'پکیج نسخه دستگاه با موفقیت دانلود شد!',
 };

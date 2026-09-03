@@ -52,6 +52,17 @@ export interface ScrapedLink {
   sourceUrl: string;
 }
 
+export type DeviceType = 'desktop' | 'tablet' | 'mobile';
+
+export interface DeviceVersion {
+  device: DeviceType;
+  title: string;
+  files: ExtractedFile[];
+  totalBytes: number;
+  viewport: string;
+  userAgent: string;
+}
+
 export interface ExtractedFile {
   id: string;
   name: string;
@@ -76,6 +87,7 @@ export interface ScrapeResult {
   totalHeadingsFound: number;
   headingsCount: Record<HeadingLevel, number>;
   files: ExtractedFile[];
+  deviceVersions?: Record<DeviceType, DeviceVersion>;
   scannedUrls: string[];
   executionTimeMs: number;
 }
