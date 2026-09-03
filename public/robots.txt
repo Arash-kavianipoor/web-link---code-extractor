@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://webscrape-studio.app/sitemap.xml

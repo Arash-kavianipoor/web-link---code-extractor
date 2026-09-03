@@ -1,7 +1,0 @@
-{
-  "name": "WebScrape Studio & Multi-Device Extractor",
-  "description": "Browser-powered web scraper and triple viewport preview (Desktop, Mobile, Tablet) with full HTML, CSS, JS separate ZIP downloads and H1-H6 heading hierarchy extractor in 20 languages.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
-
