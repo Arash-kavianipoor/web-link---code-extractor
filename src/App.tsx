@@ -125,11 +125,31 @@ export default function App() {
         body: JSON.stringify({ url, mode, maxPages }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch the target URL.');
+        let errMessage = '';
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          try {
+            const errorJson = await response.json();
+            errMessage = errorJson.error;
+          } catch {
+            errMessage = `HTTP ${response.status}: Failed to scrape target URL.`;
+          }
+        } else {
+          // Cloudflare HTML error pages (e.g., 503 Worker subrequest/CPU limit)
+          if (response.status === 503) {
+            errMessage =
+              language === 'fa'
+                ? 'خطای ۵۰۳ سرویس کلودفلر: ورکر به محدودیت ۵۰ ریکوئست یا زمان پردازش CPU رسید یا سایت هدف دسترسی ربات را مسدود کرده است.'
+                : 'Cloudflare 503 Service Unavailable: The worker exceeded subrequest/CPU limits or the target site blocked access.';
+          } else {
+            errMessage = `HTTP ${response.status} (${response.statusText || 'Server Error'})`;
+          }
+        }
+        throw new Error(errMessage || 'Failed to fetch the target URL.');
       }
+
+      const data = await response.json();
 
       setResult(data);
       // Clone for original vs editable state

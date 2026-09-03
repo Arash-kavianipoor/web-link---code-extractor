@@ -22,10 +22,43 @@ const TRACKER_DOMAINS = [
   'segment.io',
 ];
 
+export class SubrequestTracker {
+  private count = 0;
+  private readonly maxLimit: number;
+
+  constructor(maxLimit = 36) {
+    this.maxLimit = maxLimit;
+  }
+
+  canFetch(): boolean {
+    return this.count < this.maxLimit;
+  }
+
+  record(): boolean {
+    if (this.count >= this.maxLimit) {
+      return false;
+    }
+    this.count++;
+    return true;
+  }
+
+  get remaining(): number {
+    return Math.max(0, this.maxLimit - this.count);
+  }
+
+  get total(): number {
+    return this.count;
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
-  timeoutMs = 12000
+  timeoutMs = 7000,
+  tracker?: SubrequestTracker
 ): Promise<{ ok: boolean; status: number; text: string; contentType: string }> {
+  if (tracker && !tracker.record()) {
+    throw new Error(`Subrequest limit budget reached (max ${tracker.total})`);
+  }
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -50,8 +83,12 @@ async function fetchWithTimeout(
 
 async function fetchBinary(
   url: string,
-  timeoutMs = 8000
+  timeoutMs = 4500,
+  tracker?: SubrequestTracker
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  if (tracker && !tracker.record()) {
+    return null;
+  }
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -76,8 +113,8 @@ async function fetchBinary(
     const arrayBuffer = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Limit individual asset to 2.5MB to protect memory
-    if (buffer.byteLength > 2.5 * 1024 * 1024) {
+    // Limit individual asset to 1.5MB to protect worker memory
+    if (buffer.byteLength > 1.5 * 1024 * 1024) {
       return null;
     }
 
@@ -151,9 +188,10 @@ async function processCssContent(
   cssBaseUrl: string,
   visitedCssUrls: Set<string>,
   assetCache: Map<string, string>,
+  tracker: SubrequestTracker,
   depth = 0
 ): Promise<string> {
-  if (depth > 4) return rawCss;
+  if (depth > 3) return rawCss;
 
   let processed = rawCss;
 
@@ -162,6 +200,7 @@ async function processCssContent(
   const importMatches = [...processed.matchAll(importRegex)];
 
   for (const match of importMatches) {
+    if (!tracker.canFetch()) break;
     const fullStatement = match[0];
     const importPath = (match[1] || match[2] || '').trim();
     if (!importPath || importPath.startsWith('data:')) continue;
@@ -174,13 +213,14 @@ async function processCssContent(
       }
       visitedCssUrls.add(resolvedImportUrl);
 
-      const res = await fetchWithTimeout(resolvedImportUrl, 8000);
+      const res = await fetchWithTimeout(resolvedImportUrl, 4500, tracker);
       if (res.ok && res.text) {
         const nestedProcessed = await processCssContent(
           res.text,
           resolvedImportUrl,
           visitedCssUrls,
           assetCache,
+          tracker,
           depth + 1
         );
         processed = processed.replace(
@@ -215,20 +255,22 @@ async function processCssContent(
     }
   }
 
+  // Limit font and image embeds per stylesheet to conserve subrequests and memory
+  let fontEmbeds = 0;
   for (const assetPath of distinctAssetPaths) {
     try {
       const resolvedAssetUrl = new URL(assetPath, cssBaseUrl).href;
 
       let dataUri = assetCache.get(resolvedAssetUrl);
-      if (!dataUri) {
-        // Attempt to fetch and inline font files and images as base64
+      if (!dataUri && tracker.canFetch() && fontEmbeds < 4) {
         const isEmbeddable = /\.(woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|ico)(\?.*)?$/i.test(
           resolvedAssetUrl
         );
 
         if (isEmbeddable) {
-          const binary = await fetchBinary(resolvedAssetUrl, 6000);
-          if (binary && binary.buffer.byteLength <= 2 * 1024 * 1024) {
+          const binary = await fetchBinary(resolvedAssetUrl, 3500, tracker);
+          if (binary && binary.buffer.byteLength <= 1024 * 1024) {
+            fontEmbeds++;
             const b64 = binary.buffer.toString('base64');
             dataUri = `data:${binary.mimeType};base64,${b64}`;
             assetCache.set(resolvedAssetUrl, dataUri);
@@ -263,7 +305,8 @@ async function processHtmlForOffline(
   pageUrl: string,
   combinedCss: string,
   pageMapping: Map<string, string>,
-  assetCache: Map<string, string>
+  assetCache: Map<string, string>,
+  tracker: SubrequestTracker
 ): Promise<string> {
   const $ = cheerio.load(rawHtml);
 
@@ -278,24 +321,26 @@ async function processHtmlForOffline(
     const src = $(elem).attr('src') || '';
     const content = $(elem).html() || '';
     const isTracker = TRACKER_DOMAINS.some(
-      (tracker) => src.includes(tracker) || content.includes(tracker)
+      (trackerDomain) => src.includes(trackerDomain) || content.includes(trackerDomain)
     );
     if (isTracker) {
       $(elem).remove();
     }
   });
 
-  // Convert <img> tags to Base64 data URIs for true offline viewing
-  const imgElements = $('img').toArray().slice(0, 35);
+  // Convert <img> tags to Base64 data URIs for true offline viewing (capped to keep subrequests under limit)
+  const maxImagesToInline = Math.min(8, tracker.remaining);
+  const imgElements = $('img').toArray().slice(0, maxImagesToInline);
   for (const elem of imgElements) {
+    if (!tracker.canFetch()) break;
     const src = $(elem).attr('src') || $(elem).attr('data-src');
     if (src && !src.startsWith('data:')) {
       try {
         const resolvedImgUrl = new URL(src, pageUrl).href;
         let dataUri = assetCache.get(resolvedImgUrl);
         if (!dataUri) {
-          const binary = await fetchBinary(resolvedImgUrl, 5000);
-          if (binary && binary.buffer.byteLength <= 2 * 1024 * 1024) {
+          const binary = await fetchBinary(resolvedImgUrl, 3500, tracker);
+          if (binary && binary.buffer.byteLength <= 1024 * 1024) {
             const b64 = binary.buffer.toString('base64');
             dataUri = `data:${binary.mimeType};base64,${b64}`;
             assetCache.set(resolvedImgUrl, dataUri);
@@ -401,9 +446,13 @@ export async function scrapeWebPage(
   const assetCache = new Map<string, string>(); // url -> dataUri
   let siteTitle = '';
 
+  // Cloudflare Workers free tier allows max 50 subrequests. Keep a strict budget of 36 to guarantee safety.
+  const tracker = new SubrequestTracker(36);
+
   const maxPagesToCrawl = mode === 'single' ? 1 : Math.min(Math.max(1, maxPages), 20);
 
   while (toVisitQueue.length > 0 && visitedUrls.size < maxPagesToCrawl) {
+    if (!tracker.canFetch()) break;
     const currentUrl = toVisitQueue.shift()!;
     const normalizedUrl = currentUrl.split('#')[0];
 
@@ -413,7 +462,7 @@ export async function scrapeWebPage(
     visitedUrls.add(normalizedUrl);
 
     try {
-      const response = await fetchWithTimeout(currentUrl, 12000);
+      const response = await fetchWithTimeout(currentUrl, 8000, tracker);
       if (!response.ok) continue;
 
       const html = response.text;
@@ -551,20 +600,21 @@ export async function scrapeWebPage(
 
   const visitedCssUrls = new Set<string>();
 
-  // Fetch ALL external stylesheets concurrently
-  const stylesheetUrlArray = Array.from(allStylesheetUrls);
+  // Fetch external stylesheets (capped to 8 to avoid exhausting Cloudflare subrequests)
+  const stylesheetUrlArray = Array.from(allStylesheetUrls).slice(0, 8);
   for (const cssUrl of stylesheetUrlArray) {
-    if (visitedCssUrls.has(cssUrl)) continue;
+    if (visitedCssUrls.has(cssUrl) || !tracker.canFetch()) continue;
     visitedCssUrls.add(cssUrl);
 
     try {
-      const cssRes = await fetchWithTimeout(cssUrl, 8000);
+      const cssRes = await fetchWithTimeout(cssUrl, 5000, tracker);
       if (cssRes.ok && cssRes.text) {
         const processedCss = await processCssContent(
           cssRes.text,
           cssUrl,
           visitedCssUrls,
           assetCache,
+          tracker,
           0
         );
         cssSections.push(
@@ -584,6 +634,7 @@ export async function scrapeWebPage(
         parsedStartUrl.href,
         visitedCssUrls,
         assetCache,
+        tracker,
         0
       );
       cssSections.push(
@@ -603,9 +654,10 @@ export async function scrapeWebPage(
     `// ========================================================================\n// OFFLINE JAVASCRIPT BUNDLE\n// Extracted from ${startUrlInput}\n// ========================================================================\n`,
   ];
 
-  for (const jsUrl of Array.from(allScriptUrls).slice(0, 15)) {
+  for (const jsUrl of Array.from(allScriptUrls).slice(0, 6)) {
+    if (!tracker.canFetch()) break;
     try {
-      const jsRes = await fetchWithTimeout(jsUrl, 6000);
+      const jsRes = await fetchWithTimeout(jsUrl, 4000, tracker);
       if (jsRes.ok && jsRes.text && jsRes.text.length < 500000) {
         jsSections.push(
           `// --- Script from ${jsUrl} ---\n(function(){\ntry {\n${jsRes.text}\n} catch(e){ console.warn("Error in script ${jsUrl}:", e); }\n})();\n`
@@ -635,7 +687,8 @@ export async function scrapeWebPage(
       pageUrl,
       combinedCss,
       pageMapping,
-      assetCache
+      assetCache,
+      tracker
     );
 
     files.push({
