@@ -129,6 +129,12 @@ export const en = {
   badgeCrawlMode: 'CRAWL MODE',
   badgeSinglePage: 'SINGLE PAGE',
   itemsCount: 'items',
+  pagePrev: 'Previous',
+  pageNext: 'Next',
+  paginationShowing: 'Showing',
+  paginationOf: 'of',
+  paginationLinks: 'links',
+  paginationHeadings: 'headings',
 };
 
 export type TranslationType = typeof en;

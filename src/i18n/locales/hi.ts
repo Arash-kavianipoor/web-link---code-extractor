@@ -121,4 +121,10 @@ export const hi: TranslationType = {
   badgeCrawlMode: 'डोमेन क्रॉल',
   badgeSinglePage: 'एकल पृष्ठ',
   itemsCount: 'आइटम',
+  pagePrev: 'पिछला',
+  pageNext: 'अगला',
+  paginationShowing: 'दिखा रहा है',
+  paginationOf: 'कुल',
+  paginationLinks: 'लिंक',
+  paginationHeadings: 'शीर्षक',
 };

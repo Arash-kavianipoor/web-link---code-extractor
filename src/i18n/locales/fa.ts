@@ -131,4 +131,10 @@ export const fa: TranslationType = {
   badgeCrawlMode: 'خزش دامنه',
   badgeSinglePage: 'تک‌صفحه',
   itemsCount: 'مورد',
+  pagePrev: 'قبلی',
+  pageNext: 'بعدی',
+  paginationShowing: 'نمایش',
+  paginationOf: 'از',
+  paginationLinks: 'پیوند',
+  paginationHeadings: 'سرتیتر',
 };

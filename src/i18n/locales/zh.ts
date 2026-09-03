@@ -121,4 +121,10 @@ export const zh: TranslationType = {
   badgeCrawlMode: '整站爬取',
   badgeSinglePage: '单页面',
   itemsCount: '项',
+  pagePrev: '上一页',
+  pageNext: '下一页',
+  paginationShowing: '显示',
+  paginationOf: '共',
+  paginationLinks: '个链接',
+  paginationHeadings: '个标题',
 };

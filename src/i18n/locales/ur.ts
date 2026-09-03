@@ -121,4 +121,10 @@ export const ur: TranslationType = {
   badgeCrawlMode: 'ڈومین کرال',
   badgeSinglePage: 'ایک صفحہ',
   itemsCount: 'آئٹمز',
+  pagePrev: 'پچھلا',
+  pageNext: 'اگلا',
+  paginationShowing: 'دکھایا جا رہا ہے',
+  paginationOf: 'کل',
+  paginationLinks: 'روابط',
+  paginationHeadings: 'عنوانات',
 };

@@ -121,4 +121,10 @@ export const ko: TranslationType = {
   badgeCrawlMode: '도메인 전체 크롤링',
   badgeSinglePage: '단일 페이지',
   itemsCount: '개 항목',
+  pagePrev: '이전',
+  pageNext: '다음',
+  paginationShowing: '표시 중',
+  paginationOf: '/',
+  paginationLinks: '개 링크',
+  paginationHeadings: '개 제목',
 };

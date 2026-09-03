@@ -121,4 +121,10 @@ export const ja: TranslationType = {
   badgeCrawlMode: 'ドメイン全体収集',
   badgeSinglePage: '単一ページ',
   itemsCount: '件',
+  pagePrev: '前へ',
+  pageNext: '次へ',
+  paginationShowing: '表示中',
+  paginationOf: '/',
+  paginationLinks: '件のリンク',
+  paginationHeadings: '件の見出し',
 };

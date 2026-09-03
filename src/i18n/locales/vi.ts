@@ -121,4 +121,10 @@ export const vi: TranslationType = {
   badgeCrawlMode: 'THU THẬP TÊN MIỀN',
   badgeSinglePage: 'TRANG ĐƠN',
   itemsCount: 'mục',
+  pagePrev: 'Trước',
+  pageNext: 'Sau',
+  paginationShowing: 'Đang hiển thị',
+  paginationOf: 'trên tổng số',
+  paginationLinks: 'liên kết',
+  paginationHeadings: 'tiêu đề',
 };

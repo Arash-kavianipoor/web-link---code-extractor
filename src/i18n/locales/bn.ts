@@ -121,4 +121,10 @@ export const bn: TranslationType = {
   badgeCrawlMode: 'ডোমেন ক্রল',
   badgeSinglePage: 'একক পৃষ্ঠা',
   itemsCount: 'টি আইটেম',
+  pagePrev: 'পূর্ববর্তী',
+  pageNext: 'পরবর্তী',
+  paginationShowing: 'প্রদর্শন করা হচ্ছে',
+  paginationOf: 'মোট',
+  paginationLinks: 'লিঙ্ক',
+  paginationHeadings: 'শিরোনাম',
 };

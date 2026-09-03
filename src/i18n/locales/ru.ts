@@ -121,4 +121,10 @@ export const ru: TranslationType = {
   badgeCrawlMode: 'ОБХОД ДОМЕНА',
   badgeSinglePage: 'ОДНА СТРАНИЦА',
   itemsCount: 'элементов',
+  pagePrev: 'Назад',
+  pageNext: 'Вперед',
+  paginationShowing: 'Показано',
+  paginationOf: 'из',
+  paginationLinks: 'ссылок',
+  paginationHeadings: 'заголовков',
 };

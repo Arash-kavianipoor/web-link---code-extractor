@@ -121,4 +121,10 @@ export const nl: TranslationType = {
   badgeCrawlMode: 'DOMEIN DOORZOEKEN',
   badgeSinglePage: 'ENKELE PAGINA',
   itemsCount: 'items',
+  pagePrev: 'Vorige',
+  pageNext: 'Volgende',
+  paginationShowing: 'Weergave van',
+  paginationOf: 'van',
+  paginationLinks: 'links',
+  paginationHeadings: 'koppen',
 };

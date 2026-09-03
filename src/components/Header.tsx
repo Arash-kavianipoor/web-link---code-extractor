@@ -1,15 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Globe, Languages, ChevronDown, Check, Search, X } from 'lucide-react';
+import { ChevronDown, Check, Search, X, Sun, Moon } from 'lucide-react';
 import { Language } from '../types.js';
 import { translations, SUPPORTED_LANGUAGES, getLanguageInfo } from '../i18n.js';
 import { CountryFlag } from './CountryFlag.js';
+import siteLogo from '../assets/logo.webp';
 
 interface HeaderProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ language, onLanguageChange }) => {
+export const Header: React.FC<HeaderProps> = ({
+  language,
+  onLanguageChange,
+  theme = 'dark',
+  onToggleTheme,
+}) => {
   const t = translations[language];
   const currentLang = getLanguageInfo(language);
   const [isOpen, setIsOpen] = useState(false);
@@ -61,8 +69,8 @@ export const Header: React.FC<HeaderProps> = ({ language, onLanguageChange }) =>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
         {/* Left: Brand Icon & Title */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 shrink-0">
-            <Globe className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-slate-800/80 border border-slate-700/60 shadow-lg shadow-indigo-500/10 shrink-0">
+            <img src={siteLogo} alt="Site Logo" className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent leading-none truncate">
@@ -74,33 +82,41 @@ export const Header: React.FC<HeaderProps> = ({ language, onLanguageChange }) =>
           </div>
         </div>
 
-        {/* Right: High-Speed 20-Language Switcher */}
-        <div className="flex items-center gap-2 shrink-0" ref={dropdownRef}>
-          {/* Quick toggle shortcuts for popular languages (EN, FA, ES, AR) on desktop */}
-          <div className="hidden lg:flex items-center bg-slate-800/80 rounded-full p-1 border border-slate-700/80 shadow-inner">
-            {(['en', 'fa', 'es', 'ar'] as Language[]).map((code) => {
-              const info = getLanguageInfo(code);
-              const isActive = language === code;
-              return (
-                <button
-                  key={code}
-                  id={`quick-lang-${code}`}
-                  onClick={() => handleSelectLanguage(code)}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-                  }`}
-                  title={`${info.nativeName} (${info.name})`}
-                >
-                  <span className="inline-flex items-center justify-center shrink-0">
-                    <CountryFlag language={code} size="xs" />
-                  </span>
-                  <span className="uppercase">{code}</span>
-                </button>
-              );
-            })}
-          </div>
+        {/* Right: Theme Switcher & Full 20 World Languages Selector Dropdown */}
+        <div className="flex items-center gap-2.5 shrink-0" ref={dropdownRef}>
+          {/* Dark / Light Mode Switch */}
+          <button
+            id="theme-toggle-btn"
+            type="button"
+            onClick={onToggleTheme}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 text-slate-200 text-xs font-semibold border border-slate-700 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            title={
+              theme === 'light'
+                ? language === 'fa'
+                  ? 'تغییر به حالت تاریک'
+                  : 'Switch to Dark Mode'
+                : language === 'fa'
+                ? 'تغییر به حالت روشن'
+                : 'Switch to Light Mode'
+            }
+            aria-label={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+          >
+            {theme === 'light' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="font-medium hidden sm:inline">
+                  {language === 'fa' ? 'روشن' : 'Light'}
+                </span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span className="font-medium hidden sm:inline">
+                  {language === 'fa' ? 'تاریک' : 'Dark'}
+                </span>
+              </>
+            )}
+          </button>
 
           {/* Full 20 World Languages Selector Dropdown */}
           <div className="relative">
@@ -112,7 +128,6 @@ export const Header: React.FC<HeaderProps> = ({ language, onLanguageChange }) =>
               aria-expanded={isOpen}
               aria-haspopup="true"
             >
-              <Languages className="w-4 h-4 text-indigo-400" />
               <span className="inline-flex items-center justify-center shrink-0 drop-shadow-sm">
                 <CountryFlag language={language} size="sm" />
               </span>

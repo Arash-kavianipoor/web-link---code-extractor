@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Loader2, ArrowRight, ArrowLeft, Globe, Layers, FileCode2 } from 'lucide-react';
 import { Language, CrawlMode } from '../types.js';
-import { translations } from '../i18n.js';
+import { translations, isRtlLanguage } from '../i18n.js';
 
 interface ScraperFormProps {
   language: Language;
@@ -16,7 +16,7 @@ export const ScraperForm: React.FC<ScraperFormProps> = ({ language, onScrape, is
   const [error, setError] = useState<string | null>(null);
 
   const t = translations[language];
-  const isRtl = language === 'fa';
+  const isRtl = isRtlLanguage(language);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

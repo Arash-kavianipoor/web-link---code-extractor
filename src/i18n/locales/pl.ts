@@ -121,4 +121,10 @@ export const pl: TranslationType = {
   badgeCrawlMode: 'INDEKSACJA DOMENY',
   badgeSinglePage: 'POJEDYNCZA STRONA',
   itemsCount: 'elementów',
+  pagePrev: 'Poprzednia',
+  pageNext: 'Następna',
+  paginationShowing: 'Wyświetlanie',
+  paginationOf: 'z',
+  paginationLinks: 'linków',
+  paginationHeadings: 'nagłówków',
 };

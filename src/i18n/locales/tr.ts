@@ -121,4 +121,10 @@ export const tr: TranslationType = {
   badgeCrawlMode: 'ALAN ADI TARAMA',
   badgeSinglePage: 'TEK SAYFA',
   itemsCount: 'öğe',
+  pagePrev: 'Önceki',
+  pageNext: 'Sonraki',
+  paginationShowing: 'Gösterilen',
+  paginationOf: '/',
+  paginationLinks: 'bağlantı',
+  paginationHeadings: 'başlık',
 };

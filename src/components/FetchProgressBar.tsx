@@ -117,7 +117,7 @@ export const FetchProgressBar: React.FC<FetchProgressBarProps> = ({
                 {t.progressTitle}
               </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                {mode === 'all' ? 'CRAWL MODE' : 'SINGLE PAGE'}
+                {mode === 'all' ? t.badgeCrawlMode : t.badgeSinglePage}
               </span>
             </div>
             <p className="text-xs text-indigo-200/80 mt-0.5 truncate max-w-xs sm:max-w-md">

@@ -121,4 +121,10 @@ export const pt: TranslationType = {
   badgeCrawlMode: 'VARREDURA DO DOMÍNIO',
   badgeSinglePage: 'PÁGINA ÚNICA',
   itemsCount: 'itens',
+  pagePrev: 'Anterior',
+  pageNext: 'Próximo',
+  paginationShowing: 'Mostrando',
+  paginationOf: 'de',
+  paginationLinks: 'links',
+  paginationHeadings: 'títulos',
 };

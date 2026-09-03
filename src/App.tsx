@@ -44,6 +44,18 @@ export default function App() {
     return 'fa';
   });
 
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const savedTheme = localStorage.getItem('app_theme') as 'dark' | 'light';
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        return savedTheme;
+      }
+    } catch {
+      // ignore
+    }
+    return 'dark';
+  });
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeScrapeUrl, setActiveScrapeUrl] = useState<string>('');
   const [activeScrapeMode, setActiveScrapeMode] = useState<CrawlMode>('single');
@@ -61,6 +73,26 @@ export default function App() {
   useEffect(() => {
     updateDocumentSeo(language);
   }, [language]);
+
+  // Sync theme with localStorage and document root
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_theme', theme);
+      if (theme === 'light') {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const handleLanguageChange = (newLang: Language) => {
     setLanguage(newLang);
@@ -142,12 +174,17 @@ export default function App() {
   return (
     <div
       dir={isRtl ? 'rtl' : 'ltr'}
-      className={`min-h-screen bg-[#0f172a] text-slate-200 flex flex-col ${
-        isRtl ? 'font-sans' : 'font-sans'
+      className={`min-h-screen flex flex-col transition-colors duration-200 ${
+        theme === 'light' ? 'bg-slate-50 text-slate-900 light' : 'bg-[#0f172a] text-slate-200 dark'
       }`}
     >
       {/* Header */}
-      <Header language={language} onLanguageChange={handleLanguageChange} />
+      <Header
+        language={language}
+        onLanguageChange={handleLanguageChange}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
@@ -356,6 +393,21 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="w-full border-t border-slate-800 bg-slate-900/60 py-6 text-center text-xs text-slate-400">
+        <p>
+          Website designed by{' '}
+          <a
+            href="https://sorena-it.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-4 transition-colors"
+          >
+            Sorena-IT
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }

@@ -121,4 +121,10 @@ export const id: TranslationType = {
   badgeCrawlMode: 'RAYAPI DOMAIN',
   badgeSinglePage: 'HALAMAN TUNGGAL',
   itemsCount: 'butir',
+  pagePrev: 'Sebelumnya',
+  pageNext: 'Berikutnya',
+  paginationShowing: 'Menampilkan',
+  paginationOf: 'dari',
+  paginationLinks: 'tautan',
+  paginationHeadings: 'judul',
 };

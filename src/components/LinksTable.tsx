@@ -57,7 +57,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
   const itemsPerPage = 25;
 
   const t = translations[language];
-  const isRtl = language === 'fa';
+  const isRtl = isRtlLanguage(language);
 
   useEffect(() => {
     if (initialSubTab) {
@@ -641,9 +641,9 @@ export const LinksTable: React.FC<LinksTableProps> = ({
         totalPages > 1 && (
           <div className="p-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between text-xs text-slate-400">
             <div>
-              Showing {(currentPage - 1) * itemsPerPage + 1} -{' '}
-              {Math.min(currentPage * itemsPerPage, filteredLinks.length)} of{' '}
-              {filteredLinks.length} links
+              {t.paginationShowing} {(currentPage - 1) * itemsPerPage + 1} -{' '}
+              {Math.min(currentPage * itemsPerPage, filteredLinks.length)} {t.paginationOf}{' '}
+              {filteredLinks.length} {t.paginationLinks}
             </div>
             <div className="flex items-center gap-1.5">
               <button
@@ -651,7 +651,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                 disabled={currentPage === 1}
                 className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                Previous
+                {t.pagePrev}
               </button>
               <span className="font-medium px-1 text-slate-300">
                 {currentPage} / {totalPages}
@@ -661,7 +661,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                 disabled={currentPage === totalPages}
                 className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                Next
+                {t.pageNext}
               </button>
             </div>
           </div>
@@ -670,9 +670,9 @@ export const LinksTable: React.FC<LinksTableProps> = ({
         totalHeadingPages > 1 && (
           <div className="p-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between text-xs text-slate-400">
             <div>
-              Showing {(headingCurrentPage - 1) * itemsPerPage + 1} -{' '}
-              {Math.min(headingCurrentPage * itemsPerPage, filteredHeadings.length)} of{' '}
-              {filteredHeadings.length} headings
+              {t.paginationShowing} {(headingCurrentPage - 1) * itemsPerPage + 1} -{' '}
+              {Math.min(headingCurrentPage * itemsPerPage, filteredHeadings.length)} {t.paginationOf}{' '}
+              {filteredHeadings.length} {t.paginationHeadings}
             </div>
             <div className="flex items-center gap-1.5">
               <button
@@ -680,7 +680,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                 disabled={headingCurrentPage === 1}
                 className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                Previous
+                {t.pagePrev}
               </button>
               <span className="font-medium px-1 text-slate-300">
                 {headingCurrentPage} / {totalHeadingPages}
@@ -690,7 +690,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                 disabled={headingCurrentPage === totalHeadingPages}
                 className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                Next
+                {t.pageNext}
               </button>
             </div>
           </div>
@@ -739,7 +739,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                     </span>
                   </div>
                   <span className="text-xs font-mono text-indigo-300/80 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-500/20">
-                    {links.length} items
+                    {links.length} {t.itemsCount}
                   </span>
                 </div>
               </label>
@@ -762,7 +762,7 @@ export const LinksTable: React.FC<LinksTableProps> = ({
                       </span>
                     </div>
                     <span className="text-xs font-mono text-rose-300/80 bg-rose-950/50 px-2 py-0.5 rounded border border-rose-500/20">
-                      {headings.length} items
+                      {headings.length} {t.itemsCount}
                     </span>
                   </div>
                 </label>

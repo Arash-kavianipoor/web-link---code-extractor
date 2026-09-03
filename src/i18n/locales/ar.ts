@@ -131,4 +131,10 @@ export const ar: TranslationType = {
   badgeCrawlMode: 'زحف النطاق',
   badgeSinglePage: 'صفحة مفردة',
   itemsCount: 'عنصر',
+  pagePrev: 'السابق',
+  pageNext: 'التالي',
+  paginationShowing: 'عرض',
+  paginationOf: 'من',
+  paginationLinks: 'روابط',
+  paginationHeadings: 'عناوين',
 };
